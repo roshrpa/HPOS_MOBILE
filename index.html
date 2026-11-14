@@ -1049,7 +1049,7 @@ document.addEventListener('click', function(e){
     case 'cancelno': S.cancelAsk = null; S.cancelText = ''; break;
     case 'cancelyes':
       var why = (S.cancelText || '').trim(); if (why.length < 3) return;
-      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.cancelled = {reason:why, t:Date.now()}; if (isUuid(o.id)) queueEvent('order_cancel', {id:o.id, reason:why, t:o.cancelled.t}); } });
+      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.cancelled = {reason:why, t:Date.now()}; if (isUuid(o.id)) queueEvent('order_cancel', {id:o.id, reason:why, t:o.cancelled.t}); tAudit('Order cancelled', '#' + orderLabel(o) + ' · ' + why, 1); } });
       S.cancelAsk = null; S.cancelText = ''; saveOrders(); toast('Order cancelled'); break;
     case 'syncnow': kickSync(); toast(syncOn() ? 'Syncing' : 'Not connected yet'); return;
     case 'synctest': testSync(); return;
@@ -1089,7 +1089,7 @@ document.addEventListener('click', function(e){
       if (S.pay === 'credit'){ var cd0 = S.crd || {}; if (!String(cd0.name||'').trim()){ toast('Enter the customer name for credit'); break; } if (!/^[+\d][\d\s-]{5,}$/.test(String(cd0.phone||'').trim())){ toast('Enter a valid phone number for credit'); break; } }
       if (S.editing){
         var oo = byId(db.orders, S.editing);
-        if (oo){ oo.lines = S.cart.map(function(l){ return {cat:l.cat, name:l.name, size:l.size, price:l.price, qty:l.qty}; }); oo.note = S.note.trim(); oo.pay = S.pay || ''; oo.credit = oo.pay === 'credit' ? {name:S.crd.name.trim(), phone:S.crd.phone.trim(), by:(sync.user ? sync.user.name : '')} : undefined; saveOrders(); if (isUuid(oo.id)) queueEvent('order_update', {id:oo.id, lines:oo.lines, note:oo.note, pay:oo.pay, credit:oo.credit || null}); toast('Order #' + orderLabel(oo) + ' updated'); if (d.pr){ S.slip = oo.id; S.autoPrint = !!ui.printer; } }
+        if (oo){ oo.lines = S.cart.map(function(l){ return {cat:l.cat, name:l.name, size:l.size, price:l.price, qty:l.qty}; }); oo.note = S.note.trim(); oo.pay = S.pay || ''; oo.credit = oo.pay === 'credit' ? {name:S.crd.name.trim(), phone:S.crd.phone.trim(), by:(sync.user ? sync.user.name : '')} : undefined; saveOrders(); if (isUuid(oo.id)) queueEvent('order_update', {id:oo.id, lines:oo.lines, note:oo.note, pay:oo.pay, credit:oo.credit || null}); tAudit('Order edited', '#' + orderLabel(oo) + ' · ' + oo.lines.map(function(l){ return l.qty + '× ' + l.name; }).join(', ') + ' · ' + (oo.pay || 'unpaid')); toast('Order #' + orderLabel(oo) + ' updated'); if (d.pr){ S.slip = oo.id; S.autoPrint = !!ui.printer; } }
         S.cart = []; S.note = ''; S.pay = undefined; S.crd = null; S.review = false; S.editing = null; S.cartOpen = false; S.tab = 'orders'; S.filter = 'pending';
         break;
       }
@@ -1097,18 +1097,18 @@ document.addEventListener('click', function(e){
       db.counter++;
       var no0 = {id:uuid(), no:db.counter, dev:sync.dev || '', t:Date.now(), lines:S.cart.map(function(l){ return {cat:l.cat, name:l.name, size:l.size, price:l.price, qty:l.qty}; }), note:S.note.trim(), pay:S.pay || '', delivered:false, entered:false};
       if (no0.pay === 'credit') no0.credit = {name:S.crd.name.trim(), phone:S.crd.phone.trim(), by:(sync.user ? sync.user.name : '')};
-      db.orders.push(no0); saveOrders(); ui.lastPay = no0.pay; saveUi(); queueEvent('order', {id:no0.id, no:no0.no, dev:no0.dev, day:today(), t:no0.t, lines:no0.lines, note:no0.note, pay:no0.pay, credit:no0.credit || null});
+      db.orders.push(no0); saveOrders(); ui.lastPay = no0.pay; saveUi(); queueEvent('order', {id:no0.id, no:no0.no, dev:no0.dev, day:today(), t:no0.t, lines:no0.lines, note:no0.note, pay:no0.pay, credit:no0.credit || null}); tAudit('Order created', '#' + orderLabel(no0) + ' · ' + no0.lines.map(function(l){ return l.qty + '× ' + l.name; }).join(', ') + ' · ' + (no0.pay || 'unpaid'));
       toast('Order #' + orderLabel(no0) + ' saved'); if (d.pr){ S.slip = no0.id; S.autoPrint = !!ui.printer; }
       S.cart = []; S.note = ''; S.pay = undefined; S.crd = null; S.review = false; S.cat = menu[0].id;
       break;
     case 'filter': S.filter = d.id; S.clearAsk = false; break;
     case 'done': case 'undo':
-      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.delivered = (a === 'done'); if (isUuid(o.id)) queueEvent('order_delivered', {id:o.id, delivered:o.delivered}); } }); saveOrders(); break;
+      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.delivered = (a === 'done'); if (isUuid(o.id)) queueEvent('order_delivered', {id:o.id, delivered:o.delivered}); tAudit(o.delivered ? 'Order delivered' : 'Order marked not delivered', '#' + orderLabel(o)); } }); saveOrders(); break;
     case 'toggleentered':
       db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.entered = !o.entered; if (isUuid(o.id)) queueEvent('order_entered', {id:o.id, entered:o.entered}); } }); saveOrders(); break;
     case 'setpay': S.pay = d.v; break;
     case 'cyclepay':
-      db.orders.forEach(function(o){ if (String(o.id) === d.no && o.pay !== 'credit'){ o.pay = o.pay === 'cash' ? 'card' : o.pay === 'card' ? '' : 'cash'; if (isUuid(o.id)) queueEvent('order_pay', {id:o.id, pay:o.pay}); } }); saveOrders(); break;
+      db.orders.forEach(function(o){ if (String(o.id) === d.no && o.pay !== 'credit'){ o.pay = o.pay === 'cash' ? 'card' : o.pay === 'card' ? '' : 'cash'; if (isUuid(o.id)) queueEvent('order_pay', {id:o.id, pay:o.pay}); tAudit('Payment changed', '#' + orderLabel(o) + ' → ' + (o.pay || 'unpaid'), 1); } }); saveOrders(); break;
     case 'opencats': S.catSheet = true; break;
     case 'closecats': if (e && e.target && e.target.closest && e.target.closest('.sheet') && !e.target.closest('[data-act="pickcat"]')) return; S.catSheet = false; break;
     case 'pickcat':
@@ -1200,6 +1200,10 @@ function queueEvent(type, payload){
   if (sync.outbox.length > 5000) sync.outbox.splice(0, sync.outbox.length - 5000);
   saveSync(); paintSync(); kickSync();
 }
+function tAudit(act, detail, flag){
+  try { var r = {id:uuid(), t:Date.now(), u:(sync.user && sync.user.name) || '', uid:'', cat:'Tablet orders', act:act, d:(detail || '') + (sync.dev ? ' [' + sync.dev + ']' : '')}; if (flag) r.flag = 1; queueEvent('audit', r); } catch(e){}
+}
+function oLbl(id){ var o = db.orders.filter(function(x){ return String(x.id) === String(id); })[0]; return o ? '#' + orderLabel(o) : ''; }
 function kickSync(){ clearTimeout(syncTimer); syncTimer = setTimeout(function(){ runSync(); }, 500); }
 async function syncApi(path, o){
   o = o || {};
@@ -1356,7 +1360,7 @@ async function connectAccount(){
     if (j.token){ sync.token = j.token; } else if (!sync.token && sync.keep){ sync.token = sync.keep; }
     sync.user = {name:(j.user && j.user.name) || nm, role:(j.user && j.user.role) || 'Cashier'}; S.unlocked = (sync.user.role === 'Owner'); S.tab = 'new'; S.nav = false;
     if (j.devno && (!sync.dev || sync.devAuto)){ sync.dev = 'T' + j.devno; sync.devAuto = true; }
-    sync.url = url; sync.err = ''; saveSync();
+    sync.url = url; sync.err = ''; saveSync(); tAudit('Signed in', '');
     toast('Connected'); runSync(); render();
   } catch(e){ toast(e.name === 'AbortError' ? 'The server did not answer' : 'Cannot reach the server'); }
   finally { clearTimeout(to); }
@@ -1370,8 +1374,10 @@ function canTab(id){
   if (id === 'reports') return r === 'Manager';
   return true;
 }
-function signOut(){
+async function signOut(){
   if (sync.outbox && sync.outbox.length){ toast('Some changes are not sent to the server yet. Connect to the internet, press Sync now, then sign out.'); return; }
+  tAudit('Signed out', ''); try { await runSync(); } catch(e){}
+  if (sync.outbox && sync.outbox.length){ toast('Could not send the sign-out record. Check the internet and try again.'); return; }
   sync.keep = sync.token || sync.keep; sync.token = ''; sync.user = null; saveSync();
   S.unlocked = false; S.nav = false; S.tab = 'new'; S.cart = []; render();
 }
