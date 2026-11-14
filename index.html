@@ -1032,7 +1032,7 @@ document.addEventListener('click', function(e){
       S.cancelAsk = null; S.cancelText = ''; saveOrders(); toast('Order cancelled'); break;
     case 'syncnow': kickSync(); toast(syncOn() ? 'Syncing' : 'Not connected yet'); return;
     case 'synctest': testSync(); return;
-    case 'shopconnect': connectShop(); return;
+    case 'acctconnect': connectAccount(); return;
     case 'togglecart': S.cartOpen = !S.cartOpen; break;
     case 'item':
       c = curCat(); var item = byId(c.items, d.id);
@@ -1241,28 +1241,29 @@ async function testSync(){
   catch(e){ sync.err = e.status === 401 ? 'The device token is wrong or switched off' : e.message; toast(sync.err); }
   paintSync();
 }
-/* One-time connect with the shop code: the server hands this device its own token, so nothing long has to be typed.
+/* Connect this tablet with a user name and PIN of the shop: the server gives the tablet its own token, nothing long is typed.
    Change SERVER_DEFAULT when the shop moves to its final web address. */
 var SERVER_DEFAULT = 'https://hollywood-test.duckdns.org';
-async function connectShop(){
-  var el = document.getElementById('shopkey'), key = el ? el.value.trim() : '';
-  if (!key){ toast('Type the shop code'); return; }
+async function connectAccount(){
+  var en = document.getElementById('acctname'), ep = document.getElementById('acctpin'), nm = en ? en.value.trim() : '', pin = ep ? ep.value.trim() : '';
+  if (!nm || !pin){ toast('Type the user name and PIN'); return; }
   var url = String(sync.url || window.HP_SERVER || SERVER_DEFAULT).replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
   var ctl = new AbortController(), to = setTimeout(function(){ ctl.abort(); }, 10000);
   try {
-    var r = await fetch(url + '/enroll', {method:'POST', signal:ctl.signal, headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({key:key, name:'Tablet ' + uuid().slice(0, 4), kind:'tablet'})});
+    var r = await fetch(url + '/auth/login', {method:'POST', signal:ctl.signal, headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({name:nm, pin:pin, token:sync.token || '', device:{name:'Tablet', kind:'tablet'}})});
     var j = null; try { j = await r.json(); } catch(e){}
-    if (!r.ok || !j || !j.token){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
-    sync.url = url; sync.token = j.token; sync.err = ''; saveSync();
+    if (!r.ok || !j){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
+    if (j.token){ sync.token = j.token; }
+    sync.url = url; sync.err = ''; saveSync();
     toast('Connected'); runSync(); render();
   } catch(e){ toast(e.name === 'AbortError' ? 'The server did not answer' : 'Cannot reach the server'); }
   finally { clearTimeout(to); }
 }
 function syncCard(){
   return '<div class="card"><h3>Sync with the server</h3>'
-    + (syncOn() ? '' : '<div class="fgrid">' + fld('Shop code (type once)','<input class="inp" id="shopkey" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">') + '</div><div style="margin:10px 0 16px"><button class="btn primary sm" data-act="shopconnect">Connect with shop code</button></div><p style="color:var(--muted);font-size:13px;margin:0 0 14px">Or type the server address and a device token by hand below.</p>')
+    + (syncOn() ? '' : '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div><div style="margin:10px 0 16px"><button class="btn primary sm" data-act="acctconnect">Connect to the server</button></div><p style="color:var(--muted);font-size:13px;margin:0 0 14px">Use the user name and PIN of any shop user. Or type the server address and a device token by hand below.</p>')
     + '<div class="fgrid">'
     + fld('Server address','<input class="inp" data-f="sync" data-k="url" placeholder="'+esc(window.HP_SERVER || SERVER_DEFAULT)+'" value="'+esc(sync.url)+'" autocomplete="off" autocapitalize="off" spellcheck="false">')
     + fld('Device token','<input class="inp" data-f="sync" data-k="token" value="'+esc(sync.token)+'" autocomplete="off" autocapitalize="off" spellcheck="false">')
