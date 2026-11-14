@@ -535,8 +535,9 @@ function railBtn(c, pressed, act){
 function vDrawer(){
   function it(id, ico, label){ return '<button class="ditem" data-act="gopage" data-v="'+id+'" aria-current="'+(S.tab===id)+'"><i>'+ico+'</i>'+label+'</button>'; }
   return '<div class="drawerscrim" data-act="closenav"><div class="drawer" role="dialog" aria-label="Navigation"><img src="'+LOGO_FULL+'" alt="Hollywood Ice Creams" style="width:170px;max-width:70%;margin:6px auto 10px;display:block">'
-    + (manual() ? it('totals','\ud83d\udcdd','To enter in main system'+(toEnter().length ? ' <span class="badge">'+toEnter().length+'</span>' : '')) : '') + it('reports','\ud83d\udcca','Reports') + it('menu','\ud83c\udf66','Edit menu') + it('settings','\u2699\ufe0f','Settings')
-    + '<p class="dsoon" style="margin-top:auto;text-align:center">Hollywood Orders · version '+APP_VERSION+'</p></div></div>';
+    + (manual() ? it('totals','\ud83d\udcdd','To enter in main system'+(toEnter().length ? ' <span class="badge">'+toEnter().length+'</span>' : '')) : '') + (canTab('reports') ? it('reports','\ud83d\udcca','Reports') : '') + (canTab('menu') ? it('menu','\ud83c\udf66','Edit menu') : '') + (canTab('settings') ? it('settings','\u2699\ufe0f','Settings') : '')
+    + '<div style="margin-top:auto;text-align:center;padding:10px 0"><div style="font-size:13px;color:var(--muted);margin-bottom:8px">Signed in: '+esc(sync.user ? sync.user.name : '')+' ('+esc(myRole())+')</div><button class="btn" data-act="signout" style="width:100%">Sign out</button></div>'
+    + '<p class="dsoon" style="text-align:center">Hollywood Orders · version '+APP_VERSION+'</p></div></div>';
 }
 
 function ymd(t){ return new Date(t).toLocaleDateString('en-CA'); }
@@ -772,7 +773,7 @@ function vTotals(){
 /* Menu editor */
 function fld(label, html){ return '<label class="fld">'+label+html+'</label>'; }
 function vMenu(){
-  if (!S.unlocked){
+  if (!S.unlocked && myRole() !== 'Owner'){
     return '<div class="page"><div class="lock card"><h2>Menu editor</h2><p>Enter the PIN to edit the menu.</p>'
       + '<input id="pin" class="inp" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" value="'+esc(S.pinTry)+'" style="text-align:center;font-size:22px;letter-spacing:6px">'
       + (S.pinErr ? '<p style="color:var(--pink-dk);margin:10px 0 0">Wrong PIN. Try again.</p>' : '')
@@ -801,7 +802,7 @@ function vMenu(){
       + prices
       + fld('Label (e.g. Best seller)', '<input class="inp" data-f="itag" data-id="'+item.id+'" value="'+esc(item.tag)+'">')
       + '</div><div style="margin-top:10px">'+fld('Description / ingredients', '<input class="inp" data-f="idesc" data-id="'+item.id+'" value="'+esc(item.desc)+'">')+'</div>'
-      + '<div class="acts"><button data-act="pickimg" data-id="'+item.id+'">Change picture</button>'
+      + '<div class="acts"><button data-act="copyitem" data-id="'+item.id+'">'+(S.menuClip && S.menuClip.srcId === item.id ? '\u2713 Copied' : 'Copy')+'</button><button data-act="pickimg" data-id="'+item.id+'">Change picture</button>'
       + (item.img ? '<button data-act="noimg" data-id="'+item.id+'">Use category picture</button>' : '')
       + '<label><input type="checkbox" data-f="ioff" data-id="'+item.id+'"'+(item.off?' checked':'')+'> Sold out</label>'
       + '<button data-act="iup" data-id="'+item.id+'" aria-label="Move up"'+(i===0?' disabled':'')+'>▲</button><button data-act="idown" data-id="'+item.id+'" aria-label="Move down"'+(i===c.items.length-1?' disabled':'')+'>▼</button>'
@@ -818,7 +819,7 @@ function vMenu(){
     + '<div class="fgrid" style="margin-top:12px">'+fld('Name','<input class="inp" data-f="cname" value="'+esc(c.name)+'">')+fld('Arabic name','<input class="inp ar" data-f="car" value="'+esc(c.ar)+'">')+'</div></div>'
     + '<div class="card"><h3>Sizes and prices (AED)</h3>'+sizesHtml+'<button class="btn ghost sm" data-act="addsize">+ Add size</button>'
     + '<p style="color:var(--muted);font-size:13px;margin:10px 0 0">These prices apply to every item. To give one item a different price, type it in that item below. Leave the size name blank if the category has only one size.</p></div>'
-    + '<div class="card"><h3>Items ('+c.items.length+')</h3>'+rows+'<button class="btn primary sm" data-act="additem">+ Add item</button></div>'
+    + '<div class="card"><h3>Items ('+c.items.length+')</h3>'+rows+'<button class="btn primary sm" data-act="additem">+ Add item</button>'+(S.menuClip ? ' <button class="btn ghost sm" data-act="pasteitem">Paste copy of \u201c'+esc(S.menuClip.item.name)+'\u201d</button> <button class="btn ghost sm" data-act="clearclip">Clear copy</button>' : '<span style="color:var(--muted);font-size:13px;margin-left:8px">Tip: press Copy on an item to reuse it as a new item.</span>')+'</div>'
     + '<div class="card"><h3>Category actions</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'
     + (catDel ? '<button class="btn primary sm" data-act="delcatyes">Delete "'+esc(c.name)+'" and its items</button><button class="btn ghost sm" data-act="delno">Keep</button>'
               : '<button class="btn danger sm" data-act="delcat">Delete category</button>') + '</div></div>'
@@ -902,7 +903,7 @@ var lastSig = '', lastTab = '', KEEPALWAYS = ['.rail', '.ed .list', 'nav.tabs'];
 var SCROLLERS = ['nav.tabs', '.items', '.rail', '.lines', '.page', '.ed .main', '.ed .list', '.sheet'];
 function render(){
   var app = document.getElementById('app'), keep = {};
-  if (!syncOn()){
+  if (!syncOn() || !sync.user){
     app.innerHTML = '<div style="max-width:420px;margin:8vh auto 0;padding:0 18px"><div class="card" style="padding:24px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><img class="logo" src="'+LOGO+'" alt=""><div class="brand">Hollywood Ice Creams<small>Car order pad</small></div></div>'
       + '<h3 style="margin:0 0 14px">Sign in</h3>'
       + '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div>'
@@ -911,6 +912,7 @@ function render(){
   }
   document.body.dataset.img = ui.img; document.body.dataset.cols = ui.cols || 'auto';
   SCROLLERS.forEach(function(s){ var e = document.querySelector(s); if (e) keep[s] = [lastSig, e.scrollTop, e.scrollLeft, lastTab]; });
+  if (!canTab(S.tab)) S.tab = 'new';
   var body = S.tab==='new' ? vNew() : S.tab==='orders' ? vOrders() : S.tab==='totals' ? vTotals() : S.tab==='settings' ? vSettings() : S.tab==='reports' ? vReports() : vMenu();
   var sig = S.tab + (S.cat || '') + (S.edCat || '');
   lastSig = sig; lastTab = S.tab;
@@ -1040,6 +1042,7 @@ document.addEventListener('click', function(e){
     case 'syncnow': kickSync(); toast(syncOn() ? 'Syncing' : 'Not connected yet'); return;
     case 'synctest': testSync(); return;
     case 'acctconnect': connectAccount(); return;
+    case 'signout': signOut(); return;
     case 'togglecart': S.cartOpen = !S.cartOpen; break;
     case 'item':
       c = curCat(); var item = byId(c.items, d.id);
@@ -1133,6 +1136,16 @@ document.addEventListener('click', function(e){
     case 'delsize': c = edCat(); c.sizes = c.sizes.filter(function(s){ return s.id !== d.sid; });
       c.items.forEach(function(x){ if (x.prices) delete x.prices[d.sid]; }); saveMenu(); break;
     case 'additem': c = edCat(); c.items.push(it('New item', '', '')); saveMenu(); break;
+    case 'copyitem': c = edCat(); var ci = byId(c.items, d.id); if (ci) S.menuClip = {srcId: ci.id, item: JSON.parse(JSON.stringify(ci)), sizes: c.sizes.map(function(z){ return z.id; }), catId: c.id}; break;
+    case 'clearclip': S.menuClip = null; break;
+    case 'pasteitem': c = edCat(); if (S.menuClip){
+      var src = S.menuClip, n = JSON.parse(JSON.stringify(src.item)), np = null;
+      if (n.prices){ np = {}; c.sizes.forEach(function(z, zi){ var sid = src.catId === c.id ? z.id : src.sizes[zi]; if (sid != null && n.prices[sid] != null) np[z.id] = n.prices[sid]; }); }
+      n.id = uid('i'); n.name = n.name + ' (copy)'; n.prices = np; n.off = false;
+      var pos = byId(c.items, src.srcId); var pi = pos ? c.items.indexOf(pos) : -1;
+      if (pi >= 0 && src.catId === c.id) c.items.splice(pi + 1, 0, n); else c.items.push(n);
+      saveMenu(); setTimeout(function(){ var e = document.querySelector('[data-f=iname][data-id="'+n.id+'"]'); if (e){ e.scrollIntoView({block:'center'}); e.focus(); e.select(); } }, 80);
+    } break;
     case 'delitem': S.del = d.id; break;
     case 'delitemyes': c = edCat(); c.items = c.items.filter(function(x){ return x.id !== d.id; }); S.del = null; saveMenu(); break;
     case 'iup': c = edCat(); var k = c.items.indexOf(byId(c.items, d.id)); if (k > 0) swap(c.items, k, k - 1); saveMenu(); break;
@@ -1259,14 +1272,28 @@ async function connectAccount(){
   var ctl = new AbortController(), to = setTimeout(function(){ ctl.abort(); }, 10000);
   try {
     var r = await fetch(url + '/auth/login', {method:'POST', signal:ctl.signal, headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name:nm, pin:pin, token:sync.token || '', device:{name:'Tablet', kind:'tablet'}})});
+      body: JSON.stringify({name:nm, pin:pin, token:sync.token || sync.keep || '', device:{name:'Tablet', kind:'tablet'}})});
     var j = null; try { j = await r.json(); } catch(e){}
     if (!r.ok || !j){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
-    if (j.token){ sync.token = j.token; }
+    if (j.token){ sync.token = j.token; } else if (!sync.token && sync.keep){ sync.token = sync.keep; }
+    sync.user = {name:(j.user && j.user.name) || nm, role:(j.user && j.user.role) || 'Cashier'}; S.unlocked = (sync.user.role === 'Owner'); S.tab = 'new'; S.nav = false;
     sync.url = url; sync.err = ''; saveSync();
     toast('Connected'); runSync(); render();
   } catch(e){ toast(e.name === 'AbortError' ? 'The server did not answer' : 'Cannot reach the server'); }
   finally { clearTimeout(to); }
+}
+function myRole(){ return (sync.user && sync.user.role) || 'Cashier'; }
+function canTab(id){
+  var r = myRole();
+  if (r === 'Owner') return true;
+  if (id === 'menu' || id === 'settings') return false;
+  if (id === 'reports') return r === 'Manager';
+  return true;
+}
+function signOut(){
+  if (sync.outbox && sync.outbox.length){ toast('Some changes are not sent to the server yet. Connect to the internet, press Sync now, then sign out.'); return; }
+  sync.keep = sync.token || sync.keep; sync.token = ''; sync.user = null; saveSync();
+  S.unlocked = false; S.nav = false; S.tab = 'new'; S.cart = []; render();
 }
 function syncCard(){
   return '<div class="card"><h3>Sync with the server</h3>'
