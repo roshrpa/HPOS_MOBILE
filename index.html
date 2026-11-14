@@ -902,6 +902,13 @@ var lastSig = '', lastTab = '', KEEPALWAYS = ['.rail', '.ed .list', 'nav.tabs'];
 var SCROLLERS = ['nav.tabs', '.items', '.rail', '.lines', '.page', '.ed .main', '.ed .list', '.sheet'];
 function render(){
   var app = document.getElementById('app'), keep = {};
+  if (!syncOn()){
+    app.innerHTML = '<div style="max-width:420px;margin:8vh auto 0;padding:0 18px"><div class="card" style="padding:24px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><img class="logo" src="'+LOGO+'" alt=""><div class="brand">Hollywood Ice Creams<small>Car order pad</small></div></div>'
+      + '<h3 style="margin:0 0 14px">Sign in</h3>'
+      + '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div>'
+      + '<div style="margin-top:16px"><button class="btn primary" data-act="acctconnect" style="width:100%">Sign in</button></div></div></div>';
+    return;
+  }
   document.body.dataset.img = ui.img; document.body.dataset.cols = ui.cols || 'auto';
   SCROLLERS.forEach(function(s){ var e = document.querySelector(s); if (e) keep[s] = [lastSig, e.scrollTop, e.scrollLeft, lastTab]; });
   var body = S.tab==='new' ? vNew() : S.tab==='orders' ? vOrders() : S.tab==='totals' ? vTotals() : S.tab==='settings' ? vSettings() : S.tab==='reports' ? vReports() : vMenu();
@@ -968,7 +975,7 @@ document.addEventListener('change', function(e){
   if (t.dataset && t.dataset.f === 'ioff'){ byId(edCat().items, t.dataset.id).off = t.checked; saveMenu(); }
   if (t.id === 'file' && t.files && t.files[0]) readPicture(t.files[0]);
 });
-document.addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target.id === 'pin'){ tryUnlock(); } });
+document.addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target.id === 'pin'){ tryUnlock(); } if (e.key === 'Enter' && (e.target.id === 'acctpin' || e.target.id === 'acctname')){ connectAccount(); } });
 function tryUnlock(){
   if (S.pinTry === pin){ S.unlocked = true; S.pinErr = false; S.pinTry = ''; }
   else { S.pinErr = true; S.pinTry = ''; }
@@ -1224,7 +1231,7 @@ function syncState(){
   return {cls:'ok', text:'Synced'};
 }
 function syncText(){
-  if (!syncOn()) return 'Not connected.';
+  if (!syncOn()) return 'Not signed in.';
   var n = sync.outbox.length, t = sync.lastOk ? 'Last synced ' + new Date(sync.lastOk).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '. ' : 'Not synced yet. ';
   return (sync.err ? sync.err + '. ' : '') + t + (n ? n + ' changes are waiting to be sent.' : 'Nothing is waiting.') + (sync.bad && sync.bad.length ? ' ' + sync.bad.length + ' changes were refused by the server.' : '');
 }
@@ -1263,7 +1270,6 @@ async function connectAccount(){
 }
 function syncCard(){
   return '<div class="card"><h3>Sync with the server</h3>'
-    + (syncOn() ? '' : '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div><div style="margin:10px 0 16px"><button class="btn primary sm" data-act="acctconnect">Connect to the server</button></div>')
     + '<div class="fgrid">' + fld('Device code (up to 4 letters, shown in bill numbers)','<input class="inp" data-f="sync" data-k="dev" maxlength="4" placeholder="T1" value="'+esc(sync.dev)+'" autocomplete="off" autocapitalize="characters">') + '</div>'
     + (syncOn() ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary sm" data-act="syncnow">Sync now</button></div>' : '')
     + '<p id="syncinfo" style="color:var(--muted);font-size:13px;margin:10px 0 0">'+esc(syncText())+'</p></div>';
