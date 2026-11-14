@@ -695,7 +695,7 @@ function vNew(){
   }).join('') : '<div class="empty">No items yet.<br>Tap an item to add it.</div>';
   return '<div class="new"><nav class="rail" aria-label="Categories">'+rail+'</nav>'
     + '<section class="menu"><h2>'+(ui.catlist !== false ? '<button class="cathead" data-act="opencats" aria-label="All categories">'+esc(c.name)+(c.ar ? '<span class="ar">'+esc(c.ar)+'</span>' : '')+'<span class="chev">\u25be All</span></button>' : esc(c.name)+(c.ar ? '<span class="ar">'+esc(c.ar)+'</span>' : ''))+'</h2><div class="items">'+items+'</div></section>'
-    + '<aside class="panel'+(S.cartOpen?' open':'')+'"><h2 data-act="togglecart">Order #'+(S.editing ? '' : (sync.dev ? sync.dev + '-' : ''))+curNo()+'<small>'+totalQty(S.cart)+' items</small></h2>'+'<div class="lines">'+lines+'</div>'
+    + '<aside class="panel'+(S.cartOpen?' open':'')+'"><h2 data-act="togglecart">Order #'+(S.editing ? '' : (sync.dev || ''))+curNo()+'<small>'+totalQty(S.cart)+' items</small></h2>'+'<div class="lines">'+lines+'</div>'
     + '<div class="foot"><div class="tot"><span>Total</span><span>AED '+money(totalAmt(S.cart))+'</span></div>'
     + '<input id="note" class="inp" type="text" placeholder="Car / note (optional)" value="'+esc(S.note)+'" autocomplete="off">'
     + '<button class="btn primary" data-act="review"'+(S.cart.length?'':' disabled')+'>'+(S.editing ? 'Review changes' : 'Review order')+'</button>'
@@ -900,7 +900,7 @@ function vSheets(){
         return '<li'+(pickRow?' style="border-bottom:0"':'')+'><span>'+(l.size?(can?'<button class="szb" data-act="revsize" data-i="'+ci+'" aria-expanded="'+(S.revSize === ci)+'" aria-label="Change size, now '+esc(l.size)+'"><em>'+esc(l.size)+' \u25be</em></button> ':'<em>'+esc(l.size)+'</em> '):'')+esc(l.name)+'</span><div class="qty"><button data-act="dec" data-i="'+ci+'" aria-label="Less">\u2212</button><output>'+l.qty+'</output><button data-act="inc" data-i="'+ci+'" aria-label="More">+</button></div><span class="amt"><small>AED</small>'+money(l.qty * l.price)+'</span></li>' + pickRow;
       }).join('');
     }).join('');
-    return '<div class="scrim"><div class="sheet revsheet" role="dialog" aria-label="Confirm order"><h3>Order #'+(S.editing ? '' : (sync.dev ? sync.dev + '-' : ''))+curNo()+'</h3><p>Read this back to the customer. '+totalQty(S.cart)+' items.</p>'
+    return '<div class="scrim"><div class="sheet revsheet" role="dialog" aria-label="Confirm order"><h3>Order #'+(S.editing ? '' : (sync.dev || ''))+curNo()+'</h3><p>Read this back to the customer. '+totalQty(S.cart)+' items.</p>'
       + '<ul class="rev">'+li+'</ul><div class="payrow">' + [['cash','Cash'],['card','Card'],['credit','Credit'],['','Pay later']].map(function(x){ return '<button data-act="setpay" data-v="'+x[0]+'" aria-pressed="'+((S.pay||'')===x[0])+'">'+x[1]+'</button>'; }).join('') + '</div>' + (S.pay === 'credit' ? '<div class="fgrid" style="margin-top:10px">' + fld('Customer name','<input class="inp" id="crname" value="'+esc((S.crd||{}).name||'')+'" autocomplete="off">') + fld('Phone','<input class="inp" id="crphone" inputmode="tel" value="'+esc((S.crd||{}).phone||'')+'" autocomplete="off">') + '</div><p style="color:var(--muted);font-size:13px;margin:6px 0 0">Credit is approved at the counter. Given by '+esc(sync.user ? sync.user.name : '')+'.</p>' : '') + '<div class="tot"><span>Total</span><span>AED '+money(totalAmt(S.cart))+'</span></div>' + (S.note ? '<p style="color:var(--ink);margin-top:8px">Note: '+esc(S.note)+'</p>' : '')
       + '<div class="btns"><button class="btn ghost" data-act="back">Edit</button>'
       + (ui.printer ? '<button class="btn primary" data-act="place" data-pr="bill">'+IC.print+(S.editing ? 'Save & print bill' : 'Confirm & print bill')+'</button>' : '<button class="btn primary" data-act="place">'+(S.editing ? 'Save changes' : 'Confirm order')+'</button>')
@@ -958,7 +958,7 @@ function swap(arr, i, j){ var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
 /* Typing in editor fields saves without redrawing, so the keyboard stays open. */
 document.addEventListener('input', function(e){
   var t = e.target, f = t.dataset && t.dataset.f;
-  if (f === 'sync'){ sync[t.dataset.k] = t.value.trim(); saveSync(); paintSync(); return; }
+  if (f === 'sync'){ sync[t.dataset.k] = t.value.trim(); if (t.dataset.k === 'dev') sync.devAuto = false; saveSync(); paintSync(); return; }
   if (f === 'shop'){ ui.shop[t.dataset.k] = t.value; saveUi(); return; }
   if (t.id === 'note'){ S.note = t.value; return; }
   if (t.id === 'crname' || t.id === 'crphone'){ S.crd = S.crd || {name:'', phone:''}; S.crd[t.id === 'crname' ? 'name' : 'phone'] = t.value; return; }
@@ -1355,6 +1355,7 @@ async function connectAccount(){
     if (!r.ok || !j){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
     if (j.token){ sync.token = j.token; } else if (!sync.token && sync.keep){ sync.token = sync.keep; }
     sync.user = {name:(j.user && j.user.name) || nm, role:(j.user && j.user.role) || 'Cashier'}; S.unlocked = (sync.user.role === 'Owner'); S.tab = 'new'; S.nav = false;
+    if (j.devno && (!sync.dev || sync.devAuto)){ sync.dev = 'T' + j.devno; sync.devAuto = true; }
     sync.url = url; sync.err = ''; saveSync();
     toast('Connected'); runSync(); render();
   } catch(e){ toast(e.name === 'AbortError' ? 'The server did not answer' : 'Cannot reach the server'); }
@@ -1376,7 +1377,7 @@ function signOut(){
 }
 function syncCard(){
   return '<div class="card"><h3>Sync with the server</h3>'
-    + '<div class="fgrid">' + fld('Device code (up to 4 letters, shown in bill numbers)','<input class="inp" data-f="sync" data-k="dev" maxlength="4" placeholder="T1" value="'+esc(sync.dev)+'" autocomplete="off" autocapitalize="characters">') + '</div>'
+    + '<div class="fgrid">' + fld('Device code (set by the server, shown in order numbers)','<input class="inp" data-f="sync" data-k="dev" maxlength="4" placeholder="T1" value="'+esc(sync.dev)+'" autocomplete="off" autocapitalize="characters">') + '</div>'
     + (syncOn() ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary sm" data-act="syncnow">Sync now</button></div>' : '')
     + '<p id="syncinfo" style="color:var(--muted);font-size:13px;margin:10px 0 0">'+esc(syncText())+'</p></div>';
 }
@@ -1385,7 +1386,7 @@ window.addEventListener('online', kickSync);
 document.addEventListener('visibilitychange', function(){ if (document.visibilityState === 'visible') kickSync(); });
 
 /* Changes made on other devices */
-function orderLabel(o){ return (o.dev ? o.dev + '-' : '') + o.no; }
+function orderLabel(o){ return (o.dev || '') + o.no; }
 function applyRemote(events){
   var changed = false;
   events.forEach(function(e){
