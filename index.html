@@ -901,7 +901,7 @@ function vSheets(){
       }).join('');
     }).join('');
     return '<div class="scrim"><div class="sheet revsheet" role="dialog" aria-label="Confirm order"><h3>Order #'+(S.editing ? '' : (sync.dev || ''))+curNo()+'</h3><p>Read this back to the customer. '+totalQty(S.cart)+' items.</p>'
-      + '<ul class="rev">'+li+'</ul><div class="payrow">' + [['cash','Cash'],['card','Card'],['credit','Credit'],['','Pay later']].map(function(x){ return '<button data-act="setpay" data-v="'+x[0]+'" aria-pressed="'+((S.pay||'')===x[0])+'">'+x[1]+'</button>'; }).join('') + '</div>' + (S.pay === 'credit' ? '<div class="fgrid" style="margin-top:10px">' + fld('Customer name','<input class="inp" id="crname" value="'+esc((S.crd||{}).name||'')+'" autocomplete="off">') + fld('Phone','<input class="inp" id="crphone" inputmode="tel" value="'+esc((S.crd||{}).phone||'')+'" autocomplete="off">') + '</div><p style="color:var(--muted);font-size:13px;margin:6px 0 0">Credit is approved at the counter. Given by '+esc(sync.user ? sync.user.name : '')+'.</p>' : '') + '<div class="tot"><span>Total</span><span>AED '+money(totalAmt(S.cart))+'</span></div>' + (S.note ? '<p style="color:var(--ink);margin-top:8px">Note: '+esc(S.note)+'</p>' : '')
+      + '<ul class="rev">'+li+'</ul><div class="payrow">' + [['cash','Cash'],['card','Card'],['credit','Credit']].map(function(x){ return '<button data-act="setpay" data-v="'+x[0]+'" aria-pressed="'+((S.pay||'')===x[0])+'">'+x[1]+'</button>'; }).join('') + '</div>' + (S.pay === 'credit' ? '<div class="fgrid" style="margin-top:10px">' + fld('Customer name','<input class="inp" id="crname" value="'+esc((S.crd||{}).name||'')+'" autocomplete="off">') + fld('Phone','<input class="inp" id="crphone" inputmode="tel" value="'+esc((S.crd||{}).phone||'')+'" autocomplete="off">') + '</div><p style="color:var(--muted);font-size:13px;margin:6px 0 0">Credit is approved at the counter. Given by '+esc(sync.user ? sync.user.name : '')+'.</p>' : '') + '<div class="tot"><span>Total</span><span>AED '+money(totalAmt(S.cart))+'</span></div>' + (S.note ? '<p style="color:var(--ink);margin-top:8px">Note: '+esc(S.note)+'</p>' : '')
       + '<div class="btns"><button class="btn ghost" data-act="back">Edit</button>'
       + (ui.printer ? '<button class="btn primary" data-act="place" data-pr="bill">'+IC.print+(S.editing ? 'Save & print bill' : 'Confirm & print bill')+'</button>' : '<button class="btn primary" data-act="place">'+(S.editing ? 'Save changes' : 'Confirm order')+'</button>')
       + '</div></div></div>';
@@ -1086,6 +1086,7 @@ document.addEventListener('click', function(e){
     case 'review': if (S.cart.length){ S.review = true; if (!S.editing && S.pay === undefined) S.pay = ui.lastPay === undefined ? 'cash' : ui.lastPay; } S.cartOpen = false; break;
     case 'back': S.review = false; S.revSize = null; break;
     case 'place':
+      if (S.pay !== 'cash' && S.pay !== 'card' && S.pay !== 'credit'){ toast('Choose Cash, Card or Credit first'); break; }
       if (S.pay === 'credit'){ var cd0 = S.crd || {}; if (!String(cd0.name||'').trim()){ toast('Enter the customer name for credit'); break; } if (!/^[+\d][\d\s-]{5,}$/.test(String(cd0.phone||'').trim())){ toast('Enter a valid phone number for credit'); break; } }
       if (S.editing){
         var oo = byId(db.orders, S.editing);
@@ -1097,7 +1098,7 @@ document.addEventListener('click', function(e){
       db.counter++;
       var no0 = {id:uuid(), no:db.counter, dev:sync.dev || '', t:Date.now(), lines:S.cart.map(function(l){ return {cat:l.cat, name:l.name, size:l.size, price:l.price, qty:l.qty}; }), note:S.note.trim(), pay:S.pay || '', delivered:false, entered:false};
       if (no0.pay === 'credit') no0.credit = {name:S.crd.name.trim(), phone:S.crd.phone.trim(), by:(sync.user ? sync.user.name : '')};
-      db.orders.push(no0); saveOrders(); ui.lastPay = no0.pay; saveUi(); queueEvent('order', {id:no0.id, no:no0.no, dev:no0.dev, day:today(), t:no0.t, lines:no0.lines, note:no0.note, pay:no0.pay, credit:no0.credit || null}); tAudit('Order created', '#' + orderLabel(no0) + ' · ' + no0.lines.map(function(l){ return l.qty + '× ' + l.name; }).join(', ') + ' · ' + (no0.pay || 'unpaid'));
+      db.orders.push(no0); saveOrders(); ui.lastPay = no0.pay; saveUi(); queueEvent('order', {by:(sync.user ? sync.user.name : ''), id:no0.id, no:no0.no, dev:no0.dev, day:today(), t:no0.t, lines:no0.lines, note:no0.note, pay:no0.pay, credit:no0.credit || null}); tAudit('Order created', '#' + orderLabel(no0) + ' · ' + no0.lines.map(function(l){ return l.qty + '× ' + l.name; }).join(', ') + ' · ' + (no0.pay || 'unpaid'));
       toast('Order #' + orderLabel(no0) + ' saved'); if (d.pr){ S.slip = no0.id; S.autoPrint = !!ui.printer; }
       S.cart = []; S.note = ''; S.pay = undefined; S.crd = null; S.review = false; S.cat = menu[0].id;
       break;
@@ -1108,7 +1109,7 @@ document.addEventListener('click', function(e){
       db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.entered = !o.entered; if (isUuid(o.id)) queueEvent('order_entered', {id:o.id, entered:o.entered}); } }); saveOrders(); break;
     case 'setpay': S.pay = d.v; break;
     case 'cyclepay':
-      db.orders.forEach(function(o){ if (String(o.id) === d.no && o.pay !== 'credit'){ o.pay = o.pay === 'cash' ? 'card' : o.pay === 'card' ? '' : 'cash'; if (isUuid(o.id)) queueEvent('order_pay', {id:o.id, pay:o.pay}); tAudit('Payment changed', '#' + orderLabel(o) + ' → ' + (o.pay || 'unpaid'), 1); } }); saveOrders(); break;
+      db.orders.forEach(function(o){ if (String(o.id) === d.no && o.pay !== 'credit'){ o.pay = o.pay === 'cash' ? 'card' : 'cash'; if (isUuid(o.id)) queueEvent('order_pay', {id:o.id, pay:o.pay}); tAudit('Payment changed', '#' + orderLabel(o) + ' → ' + (o.pay || 'unpaid'), 1); } }); saveOrders(); break;
     case 'opencats': S.catSheet = true; break;
     case 'closecats': if (e && e.target && e.target.closest && e.target.closest('.sheet') && !e.target.closest('[data-act="pickcat"]')) return; S.catSheet = false; break;
     case 'pickcat':
