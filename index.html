@@ -484,7 +484,7 @@ function byId(arr, id){ return arr.filter(function(a){ return a.id === id; })[0]
 function curCat(){ return byId(menu, S.cat) || menu[0]; }
 function edCat(){ return byId(menu, S.edCat) || menu[0]; }
 function waiting(){ return db.orders.filter(function(o){ return !o.cancelled && !o.delivered; }); }
-function manual(){ return ui.manual !== false; }
+function manual(){ return false; } /* orders reach the POS through the server; no hand entry */
 function toEnter(){ if (!manual()) return []; return db.orders.filter(function(o){ return !o.cancelled && o.delivered && !o.entered; }); }
 function cancelledOrders(){ return db.orders.filter(function(o){ return !!o.cancelled; }); }
 function pending(){ return waiting(); }
@@ -644,7 +644,6 @@ function vSettings(){
     + seg('setcols', ui.cols || 0, [[0,'Auto'],[2,'2'],[3,'3'],[4,'4'],[5,'5']]) + '</div>'
     + '<div class="card"><h3>Category list</h3><p class="hint">Tap the category name above the items to open a list of all categories. Swiping left and right still works.</p>'
     + seg('setcatlist', ui.catlist === false ? 0 : 1, [[1,'On'],[0,'Off']]) + '</div>'
-    + '<div class="card"><h3>Enter in main system</h3><p class="hint">'+(manual() ? 'On: completed orders appear in To enter, so you can type them into the other system by hand. Use this while this app runs on its own.' : 'Off: To enter is hidden. Use this when orders reach the main system by themselves.')+'</p>' + seg('setmanual', manual() ? 1 : 0, [[1,'On'],[0,'Off']]) + '</div>'
     + '<div class="card"><h3>Printer</h3><p class="hint">'+(ui.printer ? 'A printer is set up. The order screen shows one button, Confirm &amp; print bill, and the bill goes to the printer as soon as you tap it.' : 'Turn this on once the printer is set up on this tablet. Until then, Confirm order only saves the order.')+'</p>' + seg('setprinter', ui.printer ? 1 : 0, [[0,'No printer'],[1,'Printer is set up']]) + '</div>'
     + '<div class="card"><h3>Shop details</h3><p class="hint">Shown on every printed slip.</p><div class="shopf">'
     + sf('Shop name','name') + sf('Address','addr') + sf('Phone','tel') + sf('Instagram','insta') + '</div></div>'
@@ -1285,6 +1284,7 @@ async function connectAccount(){
 function myRole(){ return (sync.user && sync.user.role) || 'Cashier'; }
 function canTab(id){
   var r = myRole();
+  if (id === 'totals') return false;
   if (r === 'Owner') return true;
   if (id === 'menu' || id === 'settings') return false;
   if (id === 'reports') return r === 'Manager';
