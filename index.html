@@ -823,11 +823,6 @@ function vMenu(){
     + (catDel ? '<button class="btn primary sm" data-act="delcatyes">Delete "'+esc(c.name)+'" and its items</button><button class="btn ghost sm" data-act="delno">Keep</button>'
               : '<button class="btn danger sm" data-act="delcat">Delete category</button>') + '</div></div>'
     + syncCard()
-    + '<div class="card"><h3>Editor settings</h3><div class="fgrid">'+fld('Editor PIN','<input class="inp" id="newpin" inputmode="numeric" value="'+esc(pin)+'">')+'</div>'
-    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">'
-    + (S.resetAsk ? '<button class="btn primary sm" data-act="resetyes">Yes, restore the printed menu</button><button class="btn ghost sm" data-act="resetno">Cancel</button>'
-                  : '<button class="btn ghost sm" data-act="resetask">Restore original menu</button>')
-    + '<button class="btn ghost sm" data-act="lock">Lock editor</button></div></div>'
     + '</div></div>';
 }
 
