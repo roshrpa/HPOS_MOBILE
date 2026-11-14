@@ -1224,7 +1224,7 @@ function syncState(){
   return {cls:'ok', text:'Synced'};
 }
 function syncText(){
-  if (!syncOn()) return 'Not connected. Type the server address and the device token, then press Save and test.';
+  if (!syncOn()) return 'Not connected.';
   var n = sync.outbox.length, t = sync.lastOk ? 'Last synced ' + new Date(sync.lastOk).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) + '. ' : 'Not synced yet. ';
   return (sync.err ? sync.err + '. ' : '') + t + (n ? n + ' changes are waiting to be sent.' : 'Nothing is waiting.') + (sync.bad && sync.bad.length ? ' ' + sync.bad.length + ' changes were refused by the server.' : '');
 }
@@ -1263,12 +1263,9 @@ async function connectAccount(){
 }
 function syncCard(){
   return '<div class="card"><h3>Sync with the server</h3>'
-    + (syncOn() ? '' : '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div><div style="margin:10px 0 16px"><button class="btn primary sm" data-act="acctconnect">Connect to the server</button></div><p style="color:var(--muted);font-size:13px;margin:0 0 14px">Use the user name and PIN of any shop user. Or type the server address and a device token by hand below.</p>')
-    + '<div class="fgrid">'
-    + fld('Server address','<input class="inp" data-f="sync" data-k="url" placeholder="'+esc(window.HP_SERVER || SERVER_DEFAULT)+'" value="'+esc(sync.url)+'" autocomplete="off" autocapitalize="off" spellcheck="false">')
-    + fld('Device token','<input class="inp" data-f="sync" data-k="token" value="'+esc(sync.token)+'" autocomplete="off" autocapitalize="off" spellcheck="false">')
-    + fld('Device code (up to 4 letters, shown in bill numbers)','<input class="inp" data-f="sync" data-k="dev" maxlength="4" placeholder="T1" value="'+esc(sync.dev)+'" autocomplete="off" autocapitalize="characters">')
-    + '</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary sm" data-act="synctest">Save and test</button><button class="btn ghost sm" data-act="syncnow">Sync now</button></div>'
+    + (syncOn() ? '' : '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div><div style="margin:10px 0 16px"><button class="btn primary sm" data-act="acctconnect">Connect to the server</button></div>')
+    + '<div class="fgrid">' + fld('Device code (up to 4 letters, shown in bill numbers)','<input class="inp" data-f="sync" data-k="dev" maxlength="4" placeholder="T1" value="'+esc(sync.dev)+'" autocomplete="off" autocapitalize="characters">') + '</div>'
+    + (syncOn() ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px"><button class="btn primary sm" data-act="syncnow">Sync now</button></div>' : '')
     + '<p id="syncinfo" style="color:var(--muted);font-size:13px;margin:10px 0 0">'+esc(syncText())+'</p></div>';
 }
 setInterval(function(){ runSync(); }, 15000);
