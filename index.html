@@ -388,6 +388,7 @@ header.top .brand{font-weight:600} header.top .brand small{font-weight:400;color
 .inp{border:1px solid #e0dcd6;border-width:1px}
 .pill{font-weight:600}
 th{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
+.licbar{display:flex;align-items:center;gap:10px;background:#fdf1dc;color:#7a5410;border-bottom:1px solid #f0dcae;padding:8px 14px;font-size:13px}.licbar span{flex:1}.licbar button{background:none;border:0;font-size:20px;line-height:1;cursor:pointer;color:inherit}
 </style>
 </head>
 <body>
@@ -925,6 +926,7 @@ var lastSig = '', lastTab = '', KEEPALWAYS = ['.rail', '.ed .list', 'nav.tabs'];
 var SCROLLERS = ['nav.tabs', '.items', '.rail', '.lines', '.page', '.ed .main', '.ed .list', '.sheet'];
 function render(){
   var app = document.getElementById('app'), keep = {};
+  if (licBlocked()){ app.innerHTML = vLicBlock(); return; }
   if (!syncOn() || !sync.user){
     app.innerHTML = '<div style="max-width:420px;margin:8vh auto 0;padding:0 18px"><div class="card" style="padding:24px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><img class="logo" src="'+LOGO+'" alt=""><div class="brand">Hollywood Ice Creams<small>Car order pad</small></div></div>'
       + '<h3 style="margin:0 0 14px">Sign in</h3>'
@@ -940,7 +942,7 @@ function render(){
   lastSig = sig; lastTab = S.tab;
   var wantReveal = S.reveal; S.reveal = false;
   var wantAnim = S.anim; S.anim = null;
-  app.innerHTML = vHeader() + '<main>' + body + '</main>' + vSheets() + (S.nav ? vDrawer() : '');
+  app.innerHTML = vHeader() + licBanner() + '<main>' + body + '</main>' + vSheets() + (S.nav ? vDrawer() : '');
   paintSync();
   if (S.autoPrint && document.getElementById('slip')){ S.autoPrint = false; setTimeout(function(){ try { window.print(); } catch(e){ toast('Printing is not available here'); } }, 300); }
   SCROLLERS.forEach(function(s){
@@ -1063,6 +1065,8 @@ document.addEventListener('click', function(e){
       var why = (S.cancelText || '').trim(); if (why.length < 3) return;
       db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.cancelled = {reason:why, t:Date.now()}; if (isUuid(o.id)) queueEvent('order_cancel', {id:o.id, reason:why, t:o.cancelled.t}); tAudit('Order cancelled', '#' + orderLabel(o) + ' · ' + why, 1); } });
       S.cancelAsk = null; S.cancelText = ''; saveOrders(); toast('Order cancelled'); break;
+    case 'liccheck': licCheck(); return;
+    case 'licdis': try { sessionStorage.setItem('hp_licdis_' + today(), '1'); } catch(er){} render(); return;
     case 'syncnow': kickSync(); toast(syncOn() ? 'Syncing' : 'Not connected yet'); return;
     case 'synctest': testSync(); return;
     case 'acctconnect': connectAccount(); return;
@@ -1197,6 +1201,35 @@ var sync = (function(){
 })();
 var syncBusy = false, syncTimer = null, pendingRender = false;
 var UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/* Licence: warn in the last 30 days, block everything after the end date until the provider extends it. */
+function licDays(){ var e = sync.shopInfo && sync.shopInfo.expires_on; if (!e) return null; return Math.round((Date.parse(e) - Date.parse(today())) / 86400000); }
+function licBlocked(){ if (!sync.token) return false; var d = licDays(); return !!sync.licBlock || (d !== null && d < 0); }
+function licHit(e){ if (e && e.status === 403 && /Licence expired/i.test(e.message || '')){ if (!sync.licBlock){ sync.licBlock = true; saveSync(); licFetch().then(function(){ render(); }); } try { render(); } catch(x){} } }
+async function licFetch(){
+  try {
+    var r = await fetch(String(sync.url || '').replace(/\/+$/, '') + '/auth/status?shop=' + encodeURIComponent(sync.shop || '')), j = await r.json();
+    if (r.ok && j && j.shop){ sync.shopInfo = j.shop; sync.licBlock = !!j.shop.expired; saveSync(); return true; }
+  } catch(e){}
+  return false;
+}
+async function licCheck(){
+  var ok = await licFetch();
+  if (!ok) toast('Cannot reach the server'); else if (!sync.licBlock){ toast('Licence active again'); kickSync(); } else toast('Still expired. Contact your system provider.');
+  render();
+}
+function vLicBlock(){
+  var e = sync.shopInfo && sync.shopInfo.expires_on; if (e && licDays() >= 0) e = '';
+  return '<div style="max-width:440px;margin:12vh auto 0;padding:0 18px"><div class="card" style="padding:26px;text-align:center"><h2 style="margin:0 0 10px">Licence expired</h2>'
+    + '<p style="margin:0 0 6px;color:var(--muted)">' + (e ? 'The licence ended on ' + esc(e) + '.' : 'The licence has ended.') + '</p>'
+    + '<p style="margin:0 0 18px;color:var(--muted)">Nothing can be used until your system provider extends it. Your data is safe.</p>'
+    + '<button class="btn" data-act="liccheck">Check again</button></div></div>';
+}
+function licBanner(){
+  var d = licDays(); if (d === null || d > 30 || d < 0) return '';
+  var k = 'hp_licdis_' + today(); try { if (sessionStorage.getItem(k)) return ''; } catch(e){}
+  return '<div class="licbar"><span>Your licence ' + (d === 0 ? 'ends <b>today</b>' : 'ends in <b>' + d + ' day' + (d === 1 ? '' : 's') + '</b> (' + esc(sync.shopInfo.expires_on) + ')') + '. After that nothing can be used. Contact your system provider to renew.</span><button data-act="licdis" aria-label="Dismiss">&times;</button></div>';
+}
+setInterval(function(){ if (licBlocked() && !document.hidden) licCheck(); }, 60000);
 function saveSync(){ try { localStorage.setItem(SYNC_KEY, JSON.stringify(sync)); } catch(e){} }
 function uuid(){
   if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -1228,7 +1261,7 @@ async function syncApi(path, o){
       body: o.body ? JSON.stringify(o.body) : undefined
     });
     var j = null; try { j = await r.json(); } catch(e){}
-    if (!r.ok){ var er = new Error((j && j.error) || ('Server answered ' + r.status)); er.status = r.status; throw er; }
+    if (!r.ok){ var er = new Error((j && j.error) || ('Server answered ' + r.status)); er.status = r.status; licHit(er); throw er; }
     return j;
   } catch(e){
     if (e.name === 'AbortError') e.message = 'The server did not answer';
@@ -1373,7 +1406,7 @@ async function connectAccount(){
     var j = null; try { j = await r.json(); } catch(e){}
     if (!r.ok || !j){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
     if (j.token){ sync.token = j.token; } else if (!sync.token && sync.keep){ sync.token = sync.keep; }
-    if (j.shop && j.shop.code){ sync.shop = j.shop.code; sync.shopInfo = j.shop; }
+    if (j.shop && j.shop.code){ sync.shop = j.shop.code; sync.shopInfo = j.shop; sync.licBlock = false; }
     sync.user = {name:(j.user && j.user.name) || nm, role:(j.user && j.user.role) || 'Cashier'}; S.unlocked = (sync.user.role === 'Owner'); S.tab = 'new'; S.nav = false;
     if (j.devno && (!sync.dev || sync.devAuto)){ sync.dev = 'T' + j.devno; sync.devAuto = true; }
     sync.url = url; sync.err = ''; saveSync(); tAudit('Signed in', '');
