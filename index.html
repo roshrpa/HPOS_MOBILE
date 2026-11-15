@@ -158,12 +158,12 @@ main{flex:1;min-height:0;display:flex}
 .row{display:flex;align-items:center;gap:12px;padding:11px 18px;border-top:1px solid var(--line);font-size:18px;font-weight:500}
 .row .n{margin-left:auto;font-weight:700;font-size:24px;min-width:48px;text-align:right;color:var(--pink);font-variant-numeric:tabular-nums}
 
-.scrim{position:fixed;inset:0;background:rgba(28,26,31,.55);display:flex;align-items:flex-end;justify-content:center;z-index:10}
-.sheet{background:#fff;width:min(680px,100%);border-radius:28px 28px 0 0;padding:20px 20px 24px;max-height:92%;overflow-y:auto}
+.scrim{position:fixed;inset:0;background:rgba(28,26,31,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+.sheet{background:#fff;width:min(560px,100%);border-radius:28px;padding:24px;max-height:calc(100% - 8px);overflow-y:auto;box-shadow:0 18px 50px rgba(0,0,0,.28)}
 .sheet h3{margin:0 0 2px;font-size:24px}
 .sheet p{margin:0 0 14px;color:var(--muted)}
 .sizes{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:12px;margin-bottom:12px}
-.sizebtn{min-height:100px;border-radius:20px;background:var(--sage);border:3px solid transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px}
+.sizebtn{min-height:110px;border-radius:20px;background:var(--sage);border:3px solid transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px}
 .sizebtn:active{border-color:var(--pink);background:#fff}
 .sizebtn b{font-size:20px;font-weight:700}
 .sizebtn span{font-size:15px;color:var(--pink-dk);font-weight:600}
