@@ -928,7 +928,7 @@ function render(){
   if (!syncOn() || !sync.user){
     app.innerHTML = '<div style="max-width:420px;margin:8vh auto 0;padding:0 18px"><div class="card" style="padding:24px"><div style="display:flex;align-items:center;gap:12px;margin-bottom:18px"><img class="logo" src="'+LOGO+'" alt=""><div class="brand">Hollywood Ice Creams<small>Car order pad</small></div></div>'
       + '<h3 style="margin:0 0 14px">Sign in</h3>'
-      + '<div class="fgrid">' + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div>'
+      + '<div class="fgrid">' + fld('Shop code','<input class="inp" id="acctshop" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Given by your system provider" value="'+esc(sync.shop || '')+'">') + fld('User name','<input class="inp" id="acctname" autocomplete="off" autocapitalize="off" spellcheck="false">') + fld('PIN','<input class="inp" id="acctpin" type="password" inputmode="numeric" autocomplete="off">') + '</div>'
       + '<div style="margin-top:16px"><button class="btn primary" data-act="acctconnect" style="width:100%">Sign in</button></div></div></div>';
     return;
   }
@@ -1362,15 +1362,18 @@ var SERVER_DEFAULT = 'https://hollywood-test.duckdns.org';
 async function connectAccount(){
   var en = document.getElementById('acctname'), ep = document.getElementById('acctpin'), nm = en ? en.value.trim() : '', pin = ep ? ep.value.trim() : '';
   if (!nm || !pin){ toast('Type the user name and PIN'); return; }
+  var esh = document.getElementById('acctshop'), shop = esh ? esh.value.trim() : String(sync.shop || '');
+  if (shop !== String(sync.shop || '')){ sync.token = ''; sync.keep = ''; }
   var url = String(sync.url || window.HP_SERVER || SERVER_DEFAULT).replace(/\/+$/, '');
   if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
   var ctl = new AbortController(), to = setTimeout(function(){ ctl.abort(); }, 10000);
   try {
     var r = await fetch(url + '/auth/login', {method:'POST', signal:ctl.signal, headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({name:nm, pin:pin, token:sync.token || sync.keep || '', device:{name:'Tablet', kind:'tablet'}})});
+      body: JSON.stringify({name:nm, pin:pin, shop:shop, token:sync.token || sync.keep || '', device:{name:'Tablet', kind:'tablet'}})});
     var j = null; try { j = await r.json(); } catch(e){}
     if (!r.ok || !j){ toast((j && j.error) || ('Server answered ' + r.status)); return; }
     if (j.token){ sync.token = j.token; } else if (!sync.token && sync.keep){ sync.token = sync.keep; }
+    if (j.shop && j.shop.code){ sync.shop = j.shop.code; sync.shopInfo = j.shop; }
     sync.user = {name:(j.user && j.user.name) || nm, role:(j.user && j.user.role) || 'Cashier'}; S.unlocked = (sync.user.role === 'Owner'); S.tab = 'new'; S.nav = false;
     if (j.devno && (!sync.dev || sync.devAuto)){ sync.dev = 'T' + j.devno; sync.devAuto = true; }
     sync.url = url; sync.err = ''; saveSync(); tAudit('Signed in', '');
