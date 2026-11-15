@@ -1422,6 +1422,8 @@ function applyRemote(events){
       if (o){ o.delivered = p.delivered !== false; changed = true; }
     } else if (e.type === 'order_pay'){
       if (o){ o.pay = p.pay || ''; changed = true; }
+    } else if (e.type === 'test_reset'){
+      if (p.id && db.resetSeen !== p.id){ db.resetSeen = p.id; db.orders = []; try { sync.outbox = sync.outbox.filter(function(x){ return String(x.type).indexOf('order') !== 0; }); saveSync(); } catch(er){} changed = true; }
     } else if (e.type === 'order_entered'){
       if (o){ o.entered = p.entered !== false; changed = true; }
     }
