@@ -1193,7 +1193,7 @@ document.addEventListener('click', function(e){
 /* ---------- Sync with the shop server ----------
    Everything is saved on this device first. Each change is also put in a waiting list ("outbox").
    Whenever the server can be reached the waiting list is sent and the other devices' changes are fetched. */
-var SYNC_KEY = 'hollywood_sync_v1';
+var SYNC_KEY = 'hollywood_sync_tablet_v1';
 var sync = (function(){
   var d = {url:'', token:'', dev:'', lastSeq:0, outbox:[], bad:[], lastOk:0, err:''};
   try { var r = JSON.parse(localStorage.getItem(SYNC_KEY)); if (r) for (var k in r) d[k] = r[k]; } catch(e){}
