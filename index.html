@@ -13,7 +13,7 @@
   --pink:#df3d8a;
   --pink-dk:#b82a6f;
   --plum:#00838f;
-  --sage:#f7eff4;
+  --sage:#f8f7f5;
   --card:#ffffff;
   --ink:#1c1a1f;
   --muted:#6c6a70;
@@ -22,7 +22,7 @@
   --done-bg:#dff3ea;
   --warn-bg:#fff0d2;
   --warn:#85560a;
-  --font-d:'Poppins','Trebuchet MS',system-ui,sans-serif;
+  --font-d:'Inter','Segoe UI',system-ui,-apple-system,Roboto,'Helvetica Neue',sans-serif;
   --font-ar:'Noto Sans Arabic','Segoe UI',Tahoma,sans-serif;
   color-scheme:light;
 }
@@ -376,6 +376,18 @@ nav.tabs button.navbtn span{font-size:14px}
   .ord .tool{min-height:38px;font-size:13px}
   .ord .act .btn.main{min-height:42px;font-size:15px}
 }
+/* calm neutral look, matching the POS */
+body{font-weight:400;letter-spacing:-.005em}
+b,strong,h1,h2,h3{font-weight:600}
+header.top{border-bottom:1px solid #e9e6e1;border-image:none;background:#fff}
+header.top .brand{font-weight:600} header.top .brand small{font-weight:400;color:var(--muted)}
+.card,.tile,.tbl{border:1px solid #e9e6e1;box-shadow:none}
+.seg{border:1px solid #e6e2dc;box-shadow:none}
+.seg button{font-weight:500} .seg button[aria-pressed="true"]{font-weight:600}
+.btn{font-weight:600}
+.inp{border:1px solid #e0dcd6;border-width:1px}
+.pill{font-weight:600}
+th{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
 </style>
 </head>
 <body>
