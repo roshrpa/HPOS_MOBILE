@@ -630,16 +630,46 @@ function reportText(day){
 }
 /* ---------- Owner reports (read only). The POS publishes a summary; the sections shown follow the user's POS permissions ---------- */
 function ownerData(){ return sync.orep && sync.orep.data ? sync.orep.data : null; }
+var OSECS = ['home', 'sales', 'control', 'stock', 'money'], ONAMES = {home:'Home', sales:'Sales', control:'Control', stock:'Stock', money:'Money', orders:'Orders', access:'Access'};
 function ownerSecs(){
-  var r = myRole(), d = ownerData(), all = ['home', 'sales', 'control', 'stock', 'money'];
-  if (r === 'Owner') return all;
+  var r = myRole(), d = ownerData(), a = sync.oacc && sync.oacc.roles;
+  if (r === 'Owner') return OSECS;
+  if (a && a[r]) return OSECS.filter(function(x){ return a[r][x]; });
   if (r === 'Cashier' || !d || !d.roles || !d.roles[r]) return [];
   var p = d.roles[r], o = [];
   if (p.sales || p.cash) o.push('home'); if (p.sales) o.push('sales'); if (p.control) o.push('control'); if (p.stock) o.push('stock'); if (p.money) o.push('money');
   return o;
 }
-function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; return s.indexOf(c) >= 0 ? c : (s[0] || 'orders'); }
+function oaccOn(r, x){
+  var a = sync.oacc && sync.oacc.roles, d = ownerData();
+  if (a && a[r]) return !!a[r][x];
+  if (r === 'Cashier' || !d || !d.roles || !d.roles[r]) return false;
+  var p = d.roles[r]; return x === 'home' ? !!(p.sales || p.cash) : x === 'sales' ? !!p.sales : !!p[x];
+}
+async function oaccSave(r, x){
+  var roles = {}, list = ['Manager', 'Cashier'], d = ownerData();
+  if (d && d.roles) Object.keys(d.roles).forEach(function(k){ if (list.indexOf(k) < 0 && k !== 'Owner') list.push(k); });
+  list.forEach(function(k){ roles[k] = {}; OSECS.forEach(function(y){ roles[k][y] = oaccOn(k, y); }); });
+  roles[r][x] = !roles[r][x];
+  sync.oacc = {roles:roles, ver:(sync.oacc && sync.oacc.ver) || 0}; saveSync(); render();
+  try {
+    var g = await syncApi('/config/owneracc');
+    var res = await syncApi('/config/owneracc', {method:'PUT', body:{value:{roles:roles, t:Date.now()}, version:(g && g.version) || 0}});
+    sync.oacc.ver = res.version; saveSync(); toast('Saved for all tablets');
+  } catch(e){ toast('Saved on this tablet only. Could not reach the server.'); }
+}
+function vAccess(){
+  var d = ownerData(), list = ['Manager', 'Cashier'];
+  if (d && d.roles) Object.keys(d.roles).forEach(function(k){ if (list.indexOf(k) < 0 && k !== 'Owner') list.push(k); });
+  var h = '<div class="card"><h3>Who sees which reports</h3><p class="hint">Owner always sees everything. Tick what each role may open in this app. People are given their role in the POS under Users and permissions.</p>';
+  h += '<table class="rtab"><tr><th>Role</th>' + OSECS.map(function(x){ return '<th style="font-size:10px">' + ONAMES[x] + '</th>'; }).join('') + '</tr>';
+  h += '<tr><td><b>Owner</b></td>' + OSECS.map(function(){ return '<td>\u2713</td>'; }).join('') + '</tr>';
+  list.forEach(function(r){ h += '<tr><td><b>' + esc(r) + '</b></td>' + OSECS.map(function(x){ return '<td><input type="checkbox" style="width:22px;height:22px" data-act="oacc" data-r="' + esc(r) + '" data-x="' + x + '"' + (oaccOn(r, x) ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; });
+  return h + '</table></div>';
+}
+function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; if (c === 'access' && myRole() === 'Owner') return c; return s.indexOf(c) >= 0 ? c : (s[0] || 'orders'); }
 async function ownerFetch(force){
+  try { if (syncOn()){ var ga = await syncApi('/config/owneracc'); if (ga && ga.value && ga.value.roles && (ga.version || 0) !== ((sync.oacc && sync.oacc.ver) || 0)){ sync.oacc = {roles:ga.value.roles, ver:ga.version}; saveSync(); } } } catch(e){ if (e.status === 401) throw e; }
   if (!syncOn() || (!ownerSecs().length && myRole() !== 'Manager')) return false;
   try {
     var g = await syncApi('/config/ownerrep');
@@ -661,10 +691,10 @@ function obars(arr, lab, h){
 function ocard(title, body, note){ return '<div class="card"><h3>' + title + '</h3>' + body + (note ? '<p class="hint" style="margin:8px 0 0">' + note + '</p>' : '') + '</div>'; }
 function oempty(t){ return '<p class="hint" style="margin:0">' + t + '</p>'; }
 function oHead(){
-  var d = ownerData(), secs = ownerSecs(), cur = ownerSec(), names = {home:'Home', sales:'Sales', control:'Control', stock:'Stock', money:'Money', orders:'Orders'};
-  var all = secs.concat(canTab('reports') ? ['orders'] : []);
+  var d = ownerData(), secs = ownerSecs(), cur = ownerSec(), names = ONAMES;
+  var all = secs.concat(canTab('reports') ? ['orders'] : []).concat(myRole() === 'Owner' ? ['access'] : []);
   var h = '<div class="osegs">' + all.map(function(s){ return '<button data-act="osec" data-v="' + s + '" aria-pressed="' + (s === cur) + '">' + names[s] + '</button>'; }).join('') + '</div>';
-  if (cur !== 'orders'){
+  if (cur !== 'orders' && cur !== 'access'){
     var age = d ? Date.now() - d.t : 0;
     h += '<div class="ostamp' + (d && age > 1800000 ? ' old' : '') + '">' + (d ? 'POS data of ' + otime(d.t) + (age > 1800000 ? ' · the POS has not sent anything for a while' : '') : 'Waiting for the first update from the POS') + ' <button data-act="orefresh">Refresh</button></div>';
   }
@@ -742,6 +772,7 @@ function ownerText(d){
 function vOwner(){
   var d = ownerData(), cur = ownerSec(), body;
   if (cur === 'orders') return null;
+  if (cur === 'access') return '<div class="page">' + oHead() + vAccess() + '</div>';
   if (!d) body = '<div class="empty">No data yet. The POS sends it every minute while it is open and connected. Tap Refresh in a moment.</div>';
   else body = cur === 'home' ? oHome(d) : cur === 'sales' ? oSales(d) : cur === 'control' ? oControl(d) : cur === 'stock' ? oStock(d) : oMoney(d);
   return '<div class="page">' + oHead() + body + '</div>';
@@ -1281,6 +1312,7 @@ document.addEventListener('click', function(e){
     case 'repday': S.repDay = d.v === '0' ? today() : shiftDay(repDay(), +d.v); break;
     case 'repspan': S.repSpan = +d.v; break;
     case 'osec': S.osec = d.v; break;
+    case 'oacc': oaccSave(d.r, d.x); return;
     case 'orng': S.orng = d.v; break;
     case 'orefresh': ownerFetch(true).then(function(){ toast('Updated'); render(); }, function(){ toast('Cannot reach the server'); }); toast('Refreshing...'); return;
     case 'oshare': if (ownerData()){ var tx = ownerText(ownerData()); if (navigator.share){ navigator.share({text:tx}).catch(function(){}); } else { try { navigator.clipboard.writeText(tx).then(function(){ toast('Summary copied'); }); } catch(err){ toast('Copy not allowed here'); } } } return;
