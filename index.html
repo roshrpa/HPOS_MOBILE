@@ -731,7 +731,7 @@ function oaSend(kind){
   }
   queueEvent('mob_entry', e); tAudit('Mobile entry sent', e.kind + ' · ' + S.osent, 1); toast('Sent to the POS');
 }
-function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; if (c === 'access' && myRole() === 'Owner') return c; if (c === 'add' && ownerTabs().indexOf('add') >= 0) return c; return s.indexOf(c) >= 0 ? c : (s[0] || (ownerTabs().indexOf('add') >= 0 ? 'add' : 'orders')); }
+function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; if (c === 'add' && ownerTabs().indexOf('add') >= 0) return c; return s.indexOf(c) >= 0 ? c : (s[0] || (ownerTabs().indexOf('add') >= 0 ? 'add' : 'orders')); }
 async function ownerFetch(force){
   try { if (syncOn()){ var ga = await syncApi('/config/owneracc'); if (ga && ga.value && ga.value.roles && (ga.version || 0) !== ((sync.oacc && sync.oacc.ver) || 0)){ sync.oacc = {roles:ga.value.roles, users:ga.value.users || {}, ver:ga.version}; saveSync(); } } } catch(e){ if (e.status === 401) throw e; }
   if (!syncOn() || (!ownerTabs().length && myRole() !== 'Manager')) return false;
@@ -756,7 +756,7 @@ function ocard(title, body, note){ return '<div class="card"><h3>' + title + '</
 function oempty(t){ return '<p class="hint" style="margin:0">' + t + '</p>'; }
 function oHead(){
   var d = ownerData(), secs = ownerSecs(), cur = ownerSec(), names = ONAMES;
-  var all = ownerTabs().concat(canTab('reports') ? ['orders'] : []).concat(myRole() === 'Owner' ? ['access'] : []);
+  var all = ownerTabs().concat(canTab('reports') ? ['orders'] : []);
   var h = '<div class="osegs">' + all.map(function(s){ return '<button data-act="osec" data-v="' + s + '" aria-pressed="' + (s === cur) + '">' + names[s] + '</button>'; }).join('') + '</div>';
   if (cur !== 'orders' && cur !== 'access' && cur !== 'add'){
     var age = d ? Date.now() - d.t : 0;
