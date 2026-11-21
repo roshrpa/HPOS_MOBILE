@@ -306,6 +306,11 @@ nav.tabs button.navbtn span{font-size:14px}
 .drawer .ditem[aria-current="true"]{background:var(--pink);color:#fff}
 .drawer .ditem i{font-style:normal;font-size:22px;width:28px;text-align:center}
 .drawer .dsoon{margin:10px 6px 0;color:var(--muted);font-size:13px}
+.osegs{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px}.osegs button{flex:none;min-height:44px;padding:0 16px;border-radius:99px;background:#fff;box-shadow:inset 0 0 0 1.5px var(--line);font-weight:700;font-size:15px}.osegs button[aria-pressed="true"]{background:var(--pink);color:#fff;box-shadow:none}
+.ostamp{font-size:12px;color:var(--muted);margin:0 2px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}.ostamp.old{color:#b26a00;font-weight:600}.ostamp button{font-size:12px;font-weight:700;color:var(--pink-dk);text-decoration:underline;min-height:28px}
+.od{font-size:13px;font-weight:700}.od.dn{color:#ffd6d6}.mut{color:var(--muted)}
+.oal{display:flex;gap:8px;align-items:flex-start;width:100%;text-align:left;padding:10px 4px;border-top:1px solid var(--line);font-size:15px;min-height:44px}.oal span{color:var(--pink-dk)}.oal:first-of-type{border-top:0}
+.olow{background:var(--pink-dk);color:#fff;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px}
 .rhead{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
 .rseg{width:100%}.rseg button{flex:1}
 .rnav{display:flex;gap:8px;align-items:stretch}
@@ -623,7 +628,126 @@ function reportText(day){
         return '\n  ' + nm + ': ' + it.q + (m.sizes.length > 1 || m.sizes[0] !== '-' ? ' (' + m.sizes.filter(function(z){ return it.s[z]; }).map(function(z){ return z + ' ' + it.s[z]; }).join(', ') + ')' : '') + '  AED ' + money(it.a); }).join('');
     }).join('');
 }
+/* ---------- Owner reports (read only). The POS publishes a summary; the sections shown follow the user's POS permissions ---------- */
+function ownerData(){ return sync.orep && sync.orep.data ? sync.orep.data : null; }
+function ownerSecs(){
+  var r = myRole(), d = ownerData(), all = ['home', 'sales', 'control', 'stock', 'money'];
+  if (r === 'Owner') return all;
+  if (r === 'Cashier' || !d || !d.roles || !d.roles[r]) return [];
+  var p = d.roles[r], o = [];
+  if (p.sales || p.cash) o.push('home'); if (p.sales) o.push('sales'); if (p.control) o.push('control'); if (p.stock) o.push('stock'); if (p.money) o.push('money');
+  return o;
+}
+function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; return s.indexOf(c) >= 0 ? c : (s[0] || 'orders'); }
+async function ownerFetch(force){
+  if (!syncOn() || (!ownerSecs().length && myRole() !== 'Manager')) return false;
+  try {
+    var g = await syncApi('/config/ownerrep');
+    if (g && g.value && g.value.v && (force || (g.version || 0) !== ((sync.orep && sync.orep.ver) || 0))){ sync.orep = {ver:g.version || 0, data:g.value, at:Date.now()}; saveSync(); return true; }
+  } catch(e){ if (e.status === 401) throw e; }
+  return false;
+}
+function fm(n){ n = +n || 0; return n.toLocaleString('en-US', {maximumFractionDigits:2}); }
+function otime(t){ var d = new Date(t), p = function(n){ return n < 10 ? '0' + n : '' + n; }; return p(d.getDate()) + '/' + p(d.getMonth() + 1) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+function odelta(cur, prev, lbl){
+  if (!prev) return cur ? '<span class="od up">' + lbl + ': new</span>' : '';
+  var p = Math.round((cur - prev) / prev * 100); return '<span class="od ' + (p < 0 ? 'dn' : 'up') + '">' + (p < 0 ? '▼ ' : '▲ ') + Math.abs(p) + '% ' + lbl + '</span>';
+}
+function otab(t, c, b){ return '<tr><td>' + esc(t) + '</td>' + c.map(function(x){ return '<td>' + x + '</td>'; }).join('') + '</tr>'; }
+function obars(arr, lab, h){
+  var mx = Math.max.apply(null, arr.concat([1]));
+  return '<div class="hbar" style="height:' + (h || 90) + 'px">' + arr.map(function(v){ return '<div style="height:' + Math.round(Math.max(v, 0) / mx * 100) + '%" title="' + fm(v) + '"></div>'; }).join('') + '</div><div class="hlab">' + lab.map(function(l){ return '<span>' + l + '</span>'; }).join('') + '</div>';
+}
+function ocard(title, body, note){ return '<div class="card"><h3>' + title + '</h3>' + body + (note ? '<p class="hint" style="margin:8px 0 0">' + note + '</p>' : '') + '</div>'; }
+function oempty(t){ return '<p class="hint" style="margin:0">' + t + '</p>'; }
+function oHead(){
+  var d = ownerData(), secs = ownerSecs(), cur = ownerSec(), names = {home:'Home', sales:'Sales', control:'Control', stock:'Stock', money:'Money', orders:'Orders'};
+  var all = secs.concat(canTab('reports') ? ['orders'] : []);
+  var h = '<div class="osegs">' + all.map(function(s){ return '<button data-act="osec" data-v="' + s + '" aria-pressed="' + (s === cur) + '">' + names[s] + '</button>'; }).join('') + '</div>';
+  if (cur !== 'orders'){
+    var age = d ? Date.now() - d.t : 0;
+    h += '<div class="ostamp' + (d && age > 1800000 ? ' old' : '') + '">' + (d ? 'POS data of ' + otime(d.t) + (age > 1800000 ? ' · the POS has not sent anything for a while' : '') : 'Waiting for the first update from the POS') + ' <button data-act="orefresh">Refresh</button></div>';
+  }
+  return h;
+}
+function oRange(){
+  var r = S.orng || 'today';
+  return '<div class="seg rseg" style="margin-bottom:10px">' + [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', '7 days'], ['month', 'Month'], ['last', 'Last month']].map(function(x){ return '<button data-act="orng" data-v="' + x[0] + '" aria-pressed="' + (r === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
+}
+function oHome(d){
+  var s = d.sales, t = s.today, y = s.yesterday, w = s.lastWd, C = d.control, fresh = d.day === today(), al = [];
+  var voidsT = C.voids.filter(function(v){ return v.d === d.day; }), discT = C.discs.filter(function(v){ return v.d === d.day; });
+  if (voidsT.length) al.push(['Cancelled bills today: ' + voidsT.length + ' (AED ' + fm(voidsT.reduce(function(a, v){ return a + v.tot; }, 0)) + ')', 'control']);
+  if (discT.length) al.push(['Discounts today: ' + discT.length + ' (AED ' + fm(discT.reduce(function(a, v){ return a + v.amt; }, 0)) + ')', 'control']);
+  var dr = C.drawer[0]; if (dr && ((dr.cash !== null && Math.abs(dr.cash) > 0.004) || (dr.card !== null && Math.abs(dr.card) > 0.004))) al.push(['Day close ' + dr.d + ': cash ' + (dr.cash === null ? '-' : (dr.cash > 0 ? '+' : '') + fm(dr.cash)) + ', card ' + (dr.card === null ? '-' : (dr.card > 0 ? '+' : '') + fm(dr.card)) + (dr.by ? ' (' + dr.by + ')' : ''), 'control']);
+  var cs = C.cups.filter(function(c){ return c.short > 0 || c.edited; })[0]; if (cs) al.push([cs.kind + ' cup count ' + cs.d + ': ' + (cs.short ? cs.short + ' item(s) short' : 'edited') + (cs.by ? ' (' + cs.by + ')' : ''), 'control']);
+  if (fresh && !C.morningDone && new Date().getHours() >= 11) al.push(['Morning cup count not done today', 'control']);
+  if (d.stock.low) al.push([d.stock.low + ' raw material(s) below minimum', 'stock']);
+  var secs = ownerSecs();
+  return '<div class="hero"><small>Sales ' + (fresh ? 'today' : d.day) + '</small><b><i>AED</i> ' + fm(t.net) + '</b><div class="hsub"><span><b>' + t.bills + '</b> bills</span><span>avg <b>' + fm(t.bills ? t.net / t.bills : 0) + '</b></span></div><div class="hsub" style="margin-top:6px">' + odelta(t.net, y.net, 'vs yesterday').replace(/class="od/, 'style="color:#fff" class="od') + odelta(t.net, w.net ? w.net : s.lastWd.net, 'vs last week').replace(/class="od/, 'style="color:#fff" class="od') + '</div></div>'
+    + '<div class="pays"><div class="pay"><small>Cash</small><b>' + fm(t.pay.cash) + '</b></div><div class="pay"><small>Card</small><b>' + fm(t.pay.card) + '</b></div><div class="pay"><small>Online</small><b>' + fm(t.pay.agg) + '</b></div><div class="pay"><small>Credit</small><b>' + fm(t.pay.credit) + '</b></div><div class="pay"><small>Discounts</small><b>' + fm(t.disc) + '</b></div><div class="pay"><small>Yesterday</small><b>' + fm(y.net) + '</b></div></div>'
+    + ocard('Needs attention', al.length ? al.map(function(a){ return '<button class="oal" data-act="osec" data-v="' + a[1] + '"' + (secs.indexOf(a[1]) < 0 ? ' disabled' : '') + '><span>●</span>' + esc(a[0]) + '</button>'; }).join('') : oempty('Nothing red. All good.'))
+    + (secs.indexOf('sales') >= 0 ? ocard('Last 30 days', obars(d.daily.map(function(x){ return x[1]; }), d.daily.map(function(x, i){ return i % 5 === 0 ? x[0].slice(3) : ''; }), 80)) : '');
+}
+function oSales(d){
+  var k = S.orng || 'today', r = d.sales[k];
+  var hrs = r.hours, f = 24, l = -1; hrs.forEach(function(v, i){ if (v){ if (i < f) f = i; if (i > l) l = i; } });
+  var hl = []; for (var h = f; h <= l; h++) hl.push(h);
+  return oRange() + '<div class="hero"><small>Net sales</small><b><i>AED</i> ' + fm(r.net) + '</b><div class="hsub"><span><b>' + r.bills + '</b> bills</span><span>avg <b>' + fm(r.bills ? r.net / r.bills : 0) + '</b></span><span>discounts <b>' + fm(r.disc) + '</b></span></div></div>'
+    + '<div class="pays"><div class="pay"><small>Cash</small><b>' + fm(r.pay.cash) + '</b></div><div class="pay"><small>Card</small><b>' + fm(r.pay.card) + '</b></div><div class="pay"><small>Credit</small><b>' + fm(r.pay.credit) + '</b></div></div>'
+    + (r.chan.length ? ocard('Online channels', '<table class="rtab"><tr><th>Channel</th><th>Bills</th><th>AED</th></tr>' + r.chan.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>') : '')
+    + ocard('By category', r.cat.length ? '<table class="rtab"><tr><th>Category</th><th>Items</th><th>AED</th></tr>' + r.cat.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>' : oempty('No sales.'))
+    + ocard('Top items', r.items.length ? '<table class="rtab"><tr><th>Item</th><th>Qty</th><th>AED</th></tr>' + r.items.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>' : oempty('No sales.'))
+    + ocard('By staff', r.staff.length ? '<table class="rtab"><tr><th>Staff</th><th>Bills</th><th>AED</th></tr>' + r.staff.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>' : oempty('No sales.'))
+    + ocard('Sales by hour (AED)', l >= 0 ? obars(hrs.slice(f, l + 1), hl, 90) : oempty('No sales.'));
+}
+function oControl(d){
+  var C = d.control;
+  var v = C.voids.length ? '<table class="rtab"><tr><th>Bill</th><th>Reason / who</th><th>AED</th></tr>' + C.voids.map(function(x){ return '<tr><td>#' + esc(x.no) + '<br><small class="mut">' + otime(x.at) + '</small></td><td style="text-align:left">' + esc(x.why) + '<br><small class="mut">' + esc(x.by) + '</small></td><td>' + fm(x.tot) + '</td></tr>'; }).join('') + '</table>' : oempty('No cancelled bills in the last 14 days.');
+  var di = C.discs.length ? '<table class="rtab"><tr><th>Bill</th><th>Reason / who</th><th>AED</th></tr>' + C.discs.map(function(x){ return '<tr><td>#' + esc(x.no) + '<br><small class="mut">' + x.d.slice(5) + '</small></td><td style="text-align:left">' + esc(x.why || '-') + '<br><small class="mut">' + esc(x.by) + '</small></td><td>' + fm(x.amt) + '</td></tr>'; }).join('') + '</table>' : oempty('No discounts in the last 14 days.');
+  var ed = C.edits.length ? '<table class="rtab"><tr><th>Bill</th><th>By</th><th>AED</th></tr>' + C.edits.map(function(x){ return otab('#' + x.no + ' ' + x.d.slice(5), [esc(x.by), fm(x.tot)]); }).join('') + '</table>' : oempty('No edited bills.');
+  var dw = C.drawer.length ? '<table class="rtab"><tr><th>Day</th><th>Cash</th><th>Card</th></tr>' + C.drawer.map(function(x){ function c(n){ return n === null ? '-' : (Math.abs(n) < 0.005 ? 'OK' : '<b style="color:' + (n < 0 ? 'var(--pink-dk)' : '#b26a00') + '">' + (n > 0 ? '+' : '') + fm(n) + '</b>'); } return '<tr><td>' + x.d.slice(5) + '<br><small class="mut">' + esc(x.by) + '</small></td><td>' + c(x.cash) + '</td><td>' + c(x.card) + '</td></tr>'; }).join('') + '</table>' : oempty('No closed days yet.');
+  var cu = C.cups.length ? '<table class="rtab"><tr><th>Count</th><th>Result</th></tr>' + C.cups.map(function(x){ return '<tr><td>' + x.d.slice(5) + ' ' + x.kind + '<br><small class="mut">' + esc(x.by) + (x.edited ? ' · edited' : '') + '</small></td><td style="text-align:left">' + (x.short ? '<b style="color:var(--pink-dk)">' + x.short + ' short</b>' + (x.loss ? ' · ~AED ' + fm(x.loss) : '') + '<br><small class="mut">' + x.items.map(function(i){ return esc(i[0]) + ' ' + i[1]; }).join(', ') + '</small>' : 'Matches') + '</td></tr>'; }).join('') + '</table>' : oempty('No counts yet.');
+  var wa = C.waste.length ? '<table class="rtab"><tr><th>Item</th><th>Who</th><th>Qty</th></tr>' + C.waste.map(function(x){ return '<tr><td>' + esc(x.m) + '<br><small class="mut">' + otime(x.t) + (x.why ? ' · ' + esc(x.why) : '') + '</small></td><td>' + esc(x.by) + '</td><td>' + fm(x.q) + ' ' + esc(x.u) + '</td></tr>'; }).join('') + '</table>' : oempty('No waste entries.');
+  var fl = C.flags.length ? '<table class="rtab">' + C.flags.map(function(x){ return '<tr><td style="color:var(--pink-dk)"><b>' + esc(x.act) + '</b><br><small class="mut">' + otime(x.t) + ' · ' + esc(x.u) + '</small></td><td style="text-align:left">' + esc(x.d) + '</td></tr>'; }).join('') + '</table>' : oempty('Nothing flagged in the last 14 days.');
+  return ocard('Cancelled bills (' + C.voids.length + ')', v) + ocard('Discounts (' + C.discs.length + ')', di) + ocard('Edited bills', ed) + ocard('Cash drawer differences', dw, 'Difference between counted cash/card machine and what the system expected.') + ocard('Cup and plate counts', cu) + ocard('Waste and adjustments', wa) + ocard('Red entries in the audit log', fl);
+}
+function oStock(d){
+  var K = d.stock, raw = K.mats.filter(function(m){ return m.raw; }), oth = K.mats.filter(function(m){ return !m.raw && !m.cup; });
+  function row(m){ var q = m.u && m.u.toLowerCase() === 'g' ? (m.tub ? fm(Math.round(m.q / m.tub * 10) / 10) + ' tub (' + fm(m.q / 1000) + ' kg)' : fm(m.q / 1000) + ' kg') : fm(m.q) + ' ' + esc(m.u); return '<tr><td>' + esc(m.n) + (m.low ? ' <span class="olow">LOW</span>' : '') + '</td><td>' + q + '</td></tr>'; }
+  return ocard('Raw materials on hand', raw.length ? '<table class="rtab"><tr><th>Material</th><th>In stock</th></tr>' + raw.map(row).join('') + '</table>' : oempty('No raw materials set up.'), 'What the system says is on the shelf (purchases minus sales by recipe).')
+    + ocard('Cups, lids and plates', K.used.length ? '<table class="rtab"><tr><th>Item</th><th>Today</th><th>Yesterday</th><th>Stock</th></tr>' + K.used.map(function(u){ return otab(u.n, [fm(u.today), fm(u.yest), fm(u.q)]); }).join('') + '</table>' : oempty('None.'))
+    + (oth.length ? ocard('Other materials', '<table class="rtab"><tr><th>Item</th><th>In stock</th></tr>' + oth.map(row).join('') + '</table>') : '')
+    + ocard('Low stock', K.low ? '<table class="rtab">' + K.mats.filter(function(m){ return m.low; }).map(function(m){ return otab(m.n, [fm(m.q) + ' ' + esc(m.u) + ' (min ' + fm(m.min) + ')']); }).join('') + '</table>' : oempty('Nothing below the minimum.'))
+    + ocard('Stock value', '<b style="font-size:22px">AED ' + fm(K.value) + '</b>');
+}
+function oMoney(d){
+  var M = d.money, mo = M.months, canCash = d.roles && d.roles[myRole()] ? d.roles[myRole()].cash : true;
+  function pl(p, ttl){ return ocard(ttl, '<table class="rtab"><tr><td>Sales (without VAT)</td><td>' + fm(p.rev) + '</td></tr><tr><td>Cost of goods</td><td>' + fm(p.cogs) + '</td></tr><tr><td><b>Gross profit</b></td><td><b>' + fm(p.gp) + '</b></td></tr><tr><td>Running costs</td><td>' + fm(p.opex) + '</td></tr><tr><td><b>Net profit</b></td><td><b style="color:' + (p.np < 0 ? 'var(--pink-dk)' : 'inherit') + '">' + fm(p.np) + '</b></td></tr></table>'); }
+  function ex(a){ return a.length ? '<table class="rtab">' + a.map(function(x){ return otab(x[0], [fm(x[1])]); }).join('') + '</table>' : oempty('No expenses.'); }
+  return ocard('Cash and bank', '<div class="pays" style="grid-template-columns:repeat(2,minmax(0,1fr));margin:0"><div class="pay"><small>Counter drawer</small><b>' + fm(M.drawer) + '</b></div><div class="pay"><small>Bank</small><b>' + fm(M.bank) + '</b></div></div>')
+    + ocard('To receive', '<table class="rtab"><tr><td>Card (not yet in bank)</td><td>' + fm(M.card) + '</td></tr>' + M.agg.map(function(a){ return otab(a.n, [fm(a.recv)]); }).join('') + '<tr><td>Credit customers</td><td>' + fm(M.credit.out) + '</td></tr><tr><td>of which overdue (' + M.credit.nod + ')</td><td><b style="color:' + (M.credit.od ? 'var(--pink-dk)' : 'inherit') + '">' + fm(M.credit.od) + '</b></td></tr></table>')
+    + ocard('To pay suppliers: AED ' + fm(M.payables), M.sups.length ? '<table class="rtab">' + M.sups.map(function(x){ return otab(x[0], [fm(x[1])]); }).join('') + '</table>' : oempty('Nothing owed.'))
+    + ocard('Expenses this month: AED ' + fm(M.exp.month), ex(M.exp.cat)) + ocard('Expenses last month: AED ' + fm(M.exp.last), ex(M.exp.lastCat))
+    + (canCash ? pl(M.pnl, 'Profit this month') + (M.pnl.method === 'purchases' ? '<p class="hint" style="padding:0 6px;margin-top:-4px">Cost of goods is taken as purchases (no month-end stock value yet).</p>' : '') + pl(M.pnlLast, 'Profit last month')
+      + ocard('Last 6 months: sales and net profit', obars(mo.map(function(x){ return x.rev; }), mo.map(function(x){ return x.m.slice(5); }), 90) + '<table class="rtab" style="margin-top:8px"><tr><th>Month</th><th>Sales</th><th>Profit</th></tr>' + mo.map(function(x){ return otab(x.m, [fm(x.rev), '<span style="color:' + (x.np < 0 ? 'var(--pink-dk)' : 'inherit') + '">' + fm(x.np) + '</span>']); }).join('') + '</table>') : '')
+    + '<div class="btns" style="justify-content:center;margin:6px 0 14px"><button class="btn" data-act="oshare">Share summary</button></div>';
+}
+function ownerText(d){
+  var s = d.sales, M = d.money, L = ['*' + (d.shop || 'Hollywood Ice Creams') + '* - summary ' + d.day, '', 'Today: AED ' + fm(s.today.net) + ' (' + s.today.bills + ' bills)', 'Yesterday: AED ' + fm(s.yesterday.net), 'Last 7 days: AED ' + fm(s.week.net), 'This month: AED ' + fm(s.month.net),
+    'Cash AED ' + fm(s.today.pay.cash) + ' / Card ' + fm(s.today.pay.card) + ' / Online ' + fm(s.today.pay.agg) + ' / Credit ' + fm(s.today.pay.credit), ''];
+  if (ownerSecs().indexOf('money') >= 0) L.push('Net profit this month: AED ' + fm(M.pnl.np), 'To pay suppliers: AED ' + fm(M.payables), 'Credit to receive: AED ' + fm(M.credit.out), 'Cash drawer: AED ' + fm(M.drawer) + '   Bank: AED ' + fm(M.bank));
+  return L.join('\n');
+}
+function vOwner(){
+  var d = ownerData(), cur = ownerSec(), body;
+  if (cur === 'orders') return null;
+  if (!d) body = '<div class="empty">No data yet. The POS sends it every minute while it is open and connected. Tap Refresh in a moment.</div>';
+  else body = cur === 'home' ? oHome(d) : cur === 'sales' ? oSales(d) : cur === 'control' ? oControl(d) : cur === 'stock' ? oStock(d) : oMoney(d);
+  return '<div class="page">' + oHead() + body + '</div>';
+}
 function vReports(){
+  var ov = ownerSecs().length || ownerSec() !== 'orders' ? vOwner() : null; if (ov) return ov;
   var day = repDay(), span = S.repSpan || 1, r = reportData(day, span), n = r.os.length;
   var mx = Math.max.apply(null, r.hours.concat([1]));
   var catRows = Object.keys(r.cats).sort(function(a,b){ return r.cats[b].a - r.cats[a].a; }).map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+r.cats[c].q+'</td><td>'+money(r.cats[c].a)+'</td></tr>'; }).join('');
@@ -634,7 +758,7 @@ function vReports(){
   var dlab = day === today() ? 'Today' : new Date(day + 'T12:00:00').toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
   function bar(label, v, tot){ var pc = tot ? Math.round(v / tot * 100) : 0; return '<div class="prog"><div class="pl"><span>'+label+'</span><b>'+v+' of '+tot+'</b></div><div class="pt"><i style="width:'+pc+'%"></i></div></div>'; }
   function pay(label, x){ return '<div class="pay"><small>'+label+'</small><b>'+money(x.a)+'</b><em>'+x.n+(x.n === 1 ? ' order' : ' orders')+'</em></div>'; }
-  return '<div class="page"><div class="rhead"><div class="seg rseg"><button data-act="repspan" data-v="1" aria-pressed="'+(span===1)+'">Day</button><button data-act="repspan" data-v="7" aria-pressed="'+(span===7)+'">7 days</button><button data-act="repspan" data-v="30" aria-pressed="'+(span===30)+'">30 days</button></div>'
+  return '<div class="page">' + (ownerSecs().length ? oHead() : '') + '<div class="rhead"><div class="seg rseg"><button data-act="repspan" data-v="1" aria-pressed="'+(span===1)+'">Day</button><button data-act="repspan" data-v="7" aria-pressed="'+(span===7)+'">7 days</button><button data-act="repspan" data-v="30" aria-pressed="'+(span===30)+'">30 days</button></div>'
     + '<div class="rnav"><button class="rb" data-act="repday" data-v="-1" aria-label="Previous day">◀</button><button class="rdate" data-act="repday" data-v="0">'+dlab+(span > 1 ? '<small>last '+span+' days up to this date</small>' : '')+'</button><button class="rb" data-act="repday" data-v="1" aria-label="Next day">▶</button><button class="rb" data-act="copyrep" aria-label="Copy report">'+IC.copy+'</button></div></div>'
     + (n ? '<div class="hero"><small>Sales</small><b><i>AED</i> '+money(r.amt)+'</b><div class="hsub"><span><b>'+n+'</b> orders</span><span><b>'+r.qty+'</b> items</span><span>avg <b>'+money(r.amt / n)+'</b></span></div></div>'
       + '<div class="pays">'+pay('Cash', r.pay.cash)+pay('Card', r.pay.card)+pay('Credit', r.pay.credit)+pay('Unpaid', r.pay.unpaid)+'</div>'
@@ -1156,6 +1280,10 @@ document.addEventListener('click', function(e){
     case 'gopage': S.nav = false; S.tab = d.v; S.cancelAsk = null; S.clearAsk = false; S.del = null; S.resetAsk = false; if (d.v !== 'menu') S.pinErr = false; break;
     case 'repday': S.repDay = d.v === '0' ? today() : shiftDay(repDay(), +d.v); break;
     case 'repspan': S.repSpan = +d.v; break;
+    case 'osec': S.osec = d.v; break;
+    case 'orng': S.orng = d.v; break;
+    case 'orefresh': ownerFetch(true).then(function(){ toast('Updated'); render(); }, function(){ toast('Cannot reach the server'); }); toast('Refreshing...'); return;
+    case 'oshare': if (ownerData()){ var tx = ownerText(ownerData()); if (navigator.share){ navigator.share({text:tx}).catch(function(){}); } else { try { navigator.clipboard.writeText(tx).then(function(){ toast('Summary copied'); }); } catch(err){ toast('Copy not allowed here'); } } } return;
     case 'copyrep': try { navigator.clipboard.writeText(reportText(repDay())).then(function(){ toast('Report copied'); }, function(){ toast('Copy not allowed here'); }); } catch(err){ toast('Copy not allowed here'); } return;
     case 'enterview': S.enterView = d.id; break;
     case 'enterone':
@@ -1373,6 +1501,7 @@ async function cfgSync(){
       if (s2 && (s2.version || 0) > (sync.cfg.stock || 0) && s2.value){ applyServerStock(s2.value); sync.cfg.stock = s2.version; saveSync(); changed = true; }
     } catch(e){ if (e.status === 401) throw e; }
   }
+  try { if (await ownerFetch(false) && S.tab === 'reports') changed = true; } catch(e){ if (e.status === 401) throw e; }
   return changed;
 }
 function renderSafe(){
@@ -1438,7 +1567,7 @@ function canTab(id){
   if (id === 'totals') return false;
   if (r === 'Owner') return true;
   if (id === 'menu' || id === 'settings') return false;
-  if (id === 'reports') return r === 'Manager';
+  if (id === 'reports') return r === 'Manager' || ownerSecs().length > 0;
   return true;
 }
 async function signOut(){
