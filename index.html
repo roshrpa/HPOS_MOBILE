@@ -492,7 +492,7 @@ var K_CH='hollywood_channels_v1', K_ORD='hollywood_orders_v2', K_MENU='hollywood
 var mem = {};
 function lsGet(k){ try { var r = localStorage.getItem(k); if (r !== null) return r; } catch(e){} return mem[k] || null; }
 function lsSet(k, v){ mem[k] = v; try { localStorage.setItem(k, v); return true; } catch(e){ return false; } }
-var ui = (function(){ var d = {img:'small', cols:5, colsV:2}; try { var o = JSON.parse(lsGet(K_UI) || '{}'); if (o.img) d.img = o.img; if (o.cols != null && o.colsV === 2) d.cols = +o.cols; d.autoslip = !!o.autoslip; d.printer = !!(o.printer || o.direct); d.manual = o.manual !== false; d.catlist = o.catlist !== false; } catch(e){} return d; })();
+var ui = (function(){ var d = {img:'small', cols:5, colsV:2}; try { var o = JSON.parse(lsGet(K_UI) || '{}'); if (o.img) d.img = o.img; if (o.cols != null && o.colsV === 2) d.cols = +o.cols; d.autoslip = !!o.autoslip; d.printer = !!(o.printer || o.direct); d.pcprint = !!o.pcprint; d.manual = o.manual !== false; d.catlist = o.catlist !== false; } catch(e){} return d; })();
 ui.shop = (function(){ var d = {name:'Hollywood Ice Creams', addr:'', tel:'056 900 4121 / 07 236 1564', insta:'@hollywoodicecreams_ae', trn:'', vat:false, rate:5}; try { var o = JSON.parse(lsGet(K_UI) || '{}').shop || {}; for (var k in o) d[k] = o[k]; } catch(e){} return d; })();
 function vatOf(total){ var r = +ui.shop.rate || 0; return ui.shop.vat && r > 0 ? total * r / (100 + r) : 0; }
 function saveUi(){ lsSet(K_UI, JSON.stringify(ui)); }
@@ -859,7 +859,7 @@ function vSettings(){
     + seg('setcols', ui.cols || 0, [[0,'Auto'],[2,'2'],[3,'3'],[4,'4'],[5,'5']]) + '</div>'
     + '<div class="card"><h3>Category list</h3><p class="hint">Tap the category name above the items to open a list of all categories. Swiping left and right still works.</p>'
     + seg('setcatlist', ui.catlist === false ? 0 : 1, [[1,'On'],[0,'Off']]) + '</div>'
-    + '<div class="card"><h3>Printer</h3><p class="hint">'+(ui.printer ? 'A printer is set up. The order screen shows one button, Confirm &amp; print bill, and the bill goes to the printer as soon as you tap it.' : 'Turn this on once the printer is set up on this tablet. Until then, Confirm order only saves the order.')+'</p>' + seg('setprinter', ui.printer ? 1 : 0, [[0,'No printer'],[1,'Printer is set up']]) + '</div>'
+    + '<div class="card"><h3>Printer</h3><p class="hint">'+(ui.printer ? 'A printer is set up. The order screen shows one button, Confirm &amp; print bill, and the bill goes to the printer as soon as you tap it.' : 'Turn this on once the printer is set up on this tablet. Until then, Confirm order only saves the order.')+'</p>' + seg('setprinter', ui.printer ? 1 : 0, [[0,'No printer'],[1,'Printer is set up']]) + (ui.printer ? '<p class="hint" style="margin-top:12px">'+(ui.pcprint ? 'Bills are sent to the counter PC and print on its printer. The counter PC must be on, with auto-print turned on.' : 'Bills print from this tablet.')+'</p>' + seg('setpcprint', ui.pcprint ? 1 : 0, [[0,'Print from this tablet'],[1,'Print on the counter PC']]) : '') + '</div>'
     + '<div class="card"><h3>Shop details</h3><p class="hint">Shown on every printed slip.</p><div class="shopf">'
     + sf('Shop name','name') + sf('Address','addr') + sf('Phone','tel') + sf('Instagram','insta') + '</div></div>'
     + '<div class="card"><h3>VAT</h3><p class="hint">'+(ui.shop.vat ? 'Slips say TAX INVOICE and show the VAT that is already inside the menu prices. Prices do not change.' : 'Slips do not show VAT. Turn this on only if the shop is VAT registered.')+'</p>'
@@ -1290,10 +1290,11 @@ document.addEventListener('click', function(e){
     case 'exityes': try { window.Capacitor.Plugins.App.exitApp(); } catch(e){} return;
     case 'slip': S.slip = d.no; break;
     case 'slipclose': S.slip = null; break;
-    case 'slipprint': window.print(); return;
+    case 'slipprint': if (ui.pcprint && S.slip){ sendPrint(S.slip, false); S.slip = null; break; } window.print(); return;
     case 'setvat': ui.shop.vat = d.v === '1'; saveUi(); break;
     case 'setmanual': ui.manual = d.v === '1'; saveUi(); if (!ui.manual && S.tab === 'totals') S.tab = 'orders'; break;
     case 'setprinter': ui.printer = d.v === '1'; saveUi(); break;
+    case 'setpcprint': ui.pcprint = d.v === '1'; saveUi(); break;
     case 'chsel':
       if (S.cart.length && (d.ch || '') !== (S.ch || '')){ toast('Finish or clear this order before changing the channel'); break; }
       S.ch = d.ch || ''; S.ref = ''; break;
@@ -1314,7 +1315,7 @@ document.addEventListener('click', function(e){
       var no0 = {id:uuid(), no:db.counter, dev:sync.dev || '', t:Date.now(), lines:S.cart.map(function(l){ return {cat:l.cat, name:l.name, size:l.size, price:l.price, qty:l.qty}; }), note:S.note.trim(), pay:S.pay || '', ch:S.ch || '', ref:S.ch ? String(S.ref || '').trim() : '', delivered:false, entered:false};
       if (no0.pay === 'credit') no0.credit = {name:S.crd.name.trim(), phone:S.crd.phone.trim(), by:(sync.user ? sync.user.name : '')};
       db.orders.push(no0); saveOrders(); if (no0.pay !== 'agg'){ ui.lastPay = no0.pay; saveUi(); } queueEvent('order', {by:(sync.user ? sync.user.name : ''), id:no0.id, no:no0.no, dev:no0.dev, day:today(), t:no0.t, lines:no0.lines, note:no0.note, pay:no0.pay, ch:no0.ch, ref:no0.ref, credit:no0.credit || null}); tAudit('Order created', '#' + orderLabel(no0) + ' · ' + no0.lines.map(function(l){ return l.qty + '× ' + l.name; }).join(', ') + ' · ' + (no0.pay || 'unpaid'));
-      toast('Order #' + orderLabel(no0) + ' saved'); if (d.pr){ S.slip = no0.id; S.autoPrint = !!ui.printer; }
+      toast('Order #' + orderLabel(no0) + ' saved'); if (d.pr){ if (ui.pcprint){ sendPrint(no0.id, true); } else { S.slip = no0.id; S.autoPrint = !!ui.printer; } }
       S.cart = []; S.note = ''; S.pay = undefined; S.crd = null; S.review = false; S.ch = ''; S.ref = ''; S.cat = menu[0].id;
       break;
     case 'filter': S.filter = d.id; S.clearAsk = false; break;
@@ -1448,6 +1449,10 @@ function uuid(){
 }
 function isUuid(x){ return UUID_RE.test(String(x)); }
 function syncOn(){ return !!(sync.url && sync.token); }
+function sendPrint(ordId, first){   // asks the counter PC (the one with the printer) to print this customer bill
+  queueEvent('print_req', {id:uuid(), ord:ordId, first:!!first, t:Date.now()});
+  toast('Bill sent to the counter printer');
+}
 function queueEvent(type, payload){
   sync.outbox.push({id:uuid(), type:type, t:Date.now(), payload:payload});
   if (sync.outbox.length > 5000) sync.outbox.splice(0, sync.outbox.length - 5000);
