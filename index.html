@@ -639,7 +639,7 @@ function oDefault(r, x){
 function oroleOn(r, x){ var a = sync.oacc && sync.oacc.roles; return a && a[r] ? !!a[r][x] : oDefault(r, x); }
 function ouserHas(n){ return !!(sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]); }
 function ouserOn(n, r, x){ var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]; return u ? !!u[x] : oroleOn(r, x); }
-function oCan(x){ var r = myRole(); if (r === 'Owner') return true; return ouserOn(sync.user && sync.user.name, r, x); }
+function oCan(x){ if (myRole() === 'Owner') return true; var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(sync.user && sync.user.name)]; return !!(u && u[x]); }
 function ownerSecs(){ return OSECS.filter(oCan); }
 function ownerTabs(){ return ownerSecs(); }
 function oaccBuild(){
@@ -1579,7 +1579,7 @@ function canTab(id){
   if (id === 'totals') return false;
   if (r === 'Owner') return true;
   if (id === 'menu' || id === 'settings') return false;
-  if (id === 'reports') return r === 'Manager' || ownerTabs().length > 0;
+  if (id === 'reports') return ownerTabs().length > 0;
   return true;
 }
 async function signOut(){
