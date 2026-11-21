@@ -398,6 +398,7 @@ header.top .brand{font-weight:600} header.top .brand small{font-weight:400;color
 .pill{font-weight:600}
 th{font-weight:500;letter-spacing:.06em;text-transform:uppercase;font-size:11px}
 .licbar{display:flex;align-items:center;gap:10px;background:#fdf1dc;color:#7a5410;border-bottom:1px solid #f0dcae;padding:8px 14px;font-size:13px}.licbar span{flex:1}.licbar button{background:none;border:0;font-size:20px;line-height:1;cursor:pointer;color:inherit}
+.chedseg{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 10px}.chedseg button{border:2px solid #e3dde0;background:#fff;border-radius:99px;padding:8px 16px;font-weight:700;font-size:14px}.chedseg button[aria-pressed=true]{background:var(--plum,#6a1b4d);border-color:var(--plum,#6a1b4d);color:#fff}.chtbl{width:100%;border-collapse:collapse}.chtbl th,.chtbl td{padding:6px 4px;text-align:left}.chtbl .n{text-align:right}
 .chseg{display:flex;gap:8px;margin:0 14px 12px;padding:4px;background:#efeaec;border-radius:16px}.chseg button{flex:1;min-width:0;border:0;background:transparent;border-radius:12px;padding:12px 6px;font-weight:700;font-size:15px;color:#555;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.chseg button[aria-pressed=true]{box-shadow:0 2px 6px rgba(0,0,0,.18)}.newbtn{border:2px solid var(--pink,#d6338a);background:#fff;color:var(--pink-dk,#b0246e);border-radius:99px;padding:6px 14px;font-weight:800;font-size:14px;cursor:pointer;margin-left:auto;margin-right:10px}.chseg button[aria-pressed=true]{background:#8a3d00;border-color:#8a3d00;color:#fff}.chseg button:first-child[aria-pressed=true]{background:#6a2c7a;border-color:#6a2c7a}
 </style>
 </head>
@@ -988,6 +989,22 @@ function vTotals(){
 
 /* Menu editor */
 function fld(label, html){ return '<label class="fld">'+label+html+'</label>'; }
+/* Online prices (Talabat, Keeta, Noon...): same card as in the POS menu */
+function chPricesCard(c){
+  var cl = chans(); if (!cl.length) return '';
+  var ce = S.chedit && cl.some(function(x){ return x.id === S.chedit; }) ? S.chedit : cl[0].id;
+  S.chedit = ce;
+  var tabs = '<div class="chedseg">'+cl.map(function(x){ return '<button data-act="chedit" data-id="'+x.id+'" aria-pressed="'+(x.id === ce)+'">'+esc(x.name)+'</button>'; }).join('')+'</div>';
+  var head = '<thead><tr><th>Item</th>'+c.sizes.map(function(z){ return '<th class="n">'+esc(z.label || 'Price')+'</th>'; }).join('')+'<th class="n">Not sold</th></tr></thead>';
+  var rows = c.items.map(function(it){
+    return '<tr><td>'+esc(it.name)+'</td>'+c.sizes.map(function(z){ var v = it.chp && it.chp[ce] && it.chp[ce][z.id] != null ? it.chp[ce][z.id] : '';
+      return '<td class="n"><input class="inp" style="width:84px;text-align:right" type="number" min="0" step="0.5" inputmode="decimal" data-f="chpx" data-id="'+it.id+'" data-sid="'+z.id+'" placeholder="'+esc(priceOf(it, z))+'" value="'+esc(v)+'" aria-label="'+esc(it.name)+' '+esc(z.label || 'price')+' on '+esc(chName(ce))+'"></td>'; }).join('')
+      + '<td class="n"><input type="checkbox" data-f="choff" data-id="'+it.id+'"'+(chHidden(it, ce) ? ' checked' : '')+' aria-label="Not sold on '+esc(chName(ce))+'"></td></tr>'; }).join('');
+  return '<div class="card"><h3>Online prices: '+esc(c.name)+'</h3>'+tabs
+    + '<p style="color:var(--muted);font-size:13px;margin:0 0 8px">Prices for '+esc(chName(ce))+'. A blank box uses the counter price (shown faint). Tick "Not sold" to hide an item on this channel.</p>'
+    + '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:0 0 10px"><label class="fld" style="margin:0">Fill from counter prices, add %<input class="inp" style="width:110px" type="number" step="any" inputmode="decimal" data-f="chpct" value="'+esc(S.chpct || '')+'" placeholder="e.g. 15"></label><button class="btn ghost sm" data-act="chfill">Fill all items</button></div>'
+    + '<div style="overflow:auto"><table class="chtbl">'+head+'<tbody>'+rows+'</tbody></table></div></div>';
+}
 function vMenu(){
   if (!S.unlocked && myRole() !== 'Owner'){
     return '<div class="page"><div class="lock card"><h2>Menu editor</h2><p>Enter the PIN to edit the menu.</p>'
@@ -1035,6 +1052,7 @@ function vMenu(){
     + '<div class="fgrid" style="margin-top:12px">'+fld('Name','<input class="inp" data-f="cname" value="'+esc(c.name)+'">')+fld('Arabic name','<input class="inp ar" data-f="car" value="'+esc(c.ar)+'">')+'</div></div>'
     + '<div class="card"><h3>Sizes and prices (AED)</h3>'+sizesHtml+'<button class="btn ghost sm" data-act="addsize">+ Add size</button>'
     + '<p style="color:var(--muted);font-size:13px;margin:10px 0 0">These prices apply to every item. To give one item a different price, type it in that item below. Leave the size name blank if the category has only one size.</p></div>'
+    + chPricesCard(c)
     + '<div class="card"><h3>Items ('+c.items.length+')</h3>'+rows+'<button class="btn primary sm" data-act="additem">+ Add item</button>'+(S.menuClip ? ' <button class="btn ghost sm" data-act="pasteitem">Paste copy of \u201c'+esc(S.menuClip.item.name)+'\u201d</button> <button class="btn ghost sm" data-act="clearclip">Clear copy</button>' : '<span style="color:var(--muted);font-size:13px;margin-left:8px">Tip: press Copy on an item to reuse it as a new item.</span>')+'</div>'
     + '<div class="card"><h3>Category actions</h3><div style="display:flex;gap:8px;flex-wrap:wrap">'
     + (catDel ? '<button class="btn primary sm" data-act="delcatyes">Delete "'+esc(c.name)+'" and its items</button><button class="btn ghost sm" data-act="delno">Keep</button>'
@@ -1172,6 +1190,8 @@ document.addEventListener('input', function(e){
   if (t.id === 'pin'){ S.pinTry = t.value; return; }
   if (t.id === 'newpin'){ if (t.value.trim()){ pin = t.value.trim(); lsSet(K_PIN, pin); } return; }
   if (!f) return;
+  if (f === 'chpx'){ var cc0 = edCat(), it0 = byId(cc0.items, t.dataset.id), ce0 = S.chedit || (chans()[0] || {}).id; if (it0 && ce0){ it0.chp = it0.chp || {}; it0.chp[ce0] = it0.chp[ce0] || {}; if (t.value === '') delete it0.chp[ce0][t.dataset.sid]; else it0.chp[ce0][t.dataset.sid] = +t.value; saveMenu(); } return; }
+  if (f === 'chpct'){ S.chpct = t.value; return; }
   var c = edCat(), item = t.dataset.id ? byId(c.items, t.dataset.id) : null;
   if (f === 'cname') c.name = t.value;
   else if (f === 'car') c.ar = t.value;
@@ -1192,6 +1212,7 @@ document.addEventListener('input', function(e){
 document.addEventListener('change', function(e){
   var t = e.target;
   if (t.dataset && t.dataset.f === 'ioff'){ byId(edCat().items, t.dataset.id).off = t.checked; saveMenu(); }
+  if (t.dataset && t.dataset.f === 'choff'){ var it1 = byId(edCat().items, t.dataset.id), ce1 = S.chedit || (chans()[0] || {}).id; if (it1 && ce1){ it1.chOff = it1.chOff || {}; if (t.checked) it1.chOff[ce1] = 1; else delete it1.chOff[ce1]; saveMenu(); } }
   if (t.id === 'file' && t.files && t.files[0]) readPicture(t.files[0]);
 });
 document.addEventListener('keydown', function(e){ if (e.key === 'Enter' && e.target.id === 'pin'){ tryUnlock(); } if (e.key === 'Enter' && (e.target.id === 'acctpin' || e.target.id === 'acctname')){ connectAccount(); } });
@@ -1371,6 +1392,12 @@ document.addEventListener('click', function(e){
       if (menu.length > 1){ menu.splice(menu.indexOf(edCat()), 1); S.edCat = menu[0].id; S.cat = menu[0].id; saveMenu(); } else toast('Keep at least one category');
       S.del = null; break;
     case 'delno': S.del = null; break;
+    case 'chedit': S.chedit = d.id; break;
+    case 'chfill':
+      var cf = S.chedit || (chans()[0] || {}).id, pc = parseFloat(S.chpct);
+      if (!cf || isNaN(pc)){ toast('Type the percent to add'); return; }
+      var ec = edCat(); ec.items.forEach(function(it){ it.chp = it.chp || {}; it.chp[cf] = it.chp[cf] || {}; ec.sizes.forEach(function(z){ it.chp[cf][z.id] = Math.round(priceOf(it, z) * (1 + pc / 100) * 2) / 2; }); });
+      saveMenu(); toast('Prices filled for ' + chName(cf)); break;
     case 'addsize': c = edCat(); c.sizes.push({id:uid('s'), label:'New size', price:0}); saveMenu(); break;
     case 'delsize': c = edCat(); c.sizes = c.sizes.filter(function(s){ return s.id !== d.sid; });
       c.items.forEach(function(x){ if (x.prices) delete x.prices[d.sid]; }); saveMenu(); break;
