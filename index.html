@@ -630,47 +630,111 @@ function reportText(day){
 }
 /* ---------- Owner reports (read only). The POS publishes a summary; the sections shown follow the user's POS permissions ---------- */
 function ownerData(){ return sync.orep && sync.orep.data ? sync.orep.data : null; }
-var OSECS = ['home', 'sales', 'control', 'stock', 'money'], ONAMES = {home:'Home', sales:'Sales', control:'Control', stock:'Stock', money:'Money', orders:'Orders', access:'Access'};
-function ownerSecs(){
-  var r = myRole(), d = ownerData(), a = sync.oacc && sync.oacc.roles;
-  if (r === 'Owner') return OSECS;
-  if (a && a[r]) return OSECS.filter(function(x){ return a[r][x]; });
-  if (r === 'Cashier' || !d || !d.roles || !d.roles[r]) return [];
-  var p = d.roles[r], o = [];
-  if (p.sales || p.cash) o.push('home'); if (p.sales) o.push('sales'); if (p.control) o.push('control'); if (p.stock) o.push('stock'); if (p.money) o.push('money');
-  return o;
-}
-function oaccOn(r, x){
-  var a = sync.oacc && sync.oacc.roles, d = ownerData();
-  if (a && a[r]) return !!a[r][x];
-  if (r === 'Cashier' || !d || !d.roles || !d.roles[r]) return false;
+var OSECS = ['home', 'sales', 'control', 'stock', 'money'], OPERMS = OSECS.concat(['addexp', 'addpur']), ONAMES = {home:'Home', sales:'Sales', control:'Control', stock:'Stock', money:'Money', orders:'Orders', access:'Access', add:'Add', addexp:'Add expense', addpur:'Add purchase'};
+function ouKey(n){ return String(n || '').trim().toLowerCase(); }
+function oDefault(r, x){
+  var d = ownerData(); if (r === 'Cashier' || !d || !d.roles || !d.roles[r] || x === 'addexp' || x === 'addpur') return false;
   var p = d.roles[r]; return x === 'home' ? !!(p.sales || p.cash) : x === 'sales' ? !!p.sales : !!p[x];
 }
-async function oaccSave(r, x){
-  var roles = {}, list = ['Manager', 'Cashier'], d = ownerData();
+function oroleOn(r, x){ var a = sync.oacc && sync.oacc.roles; return a && a[r] ? !!a[r][x] : oDefault(r, x); }
+function ouserHas(n){ return !!(sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]); }
+function ouserOn(n, r, x){ var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]; return u ? !!u[x] : oroleOn(r, x); }
+function oCan(x){ var r = myRole(); if (r === 'Owner') return true; return ouserOn(sync.user && sync.user.name, r, x); }
+function ownerSecs(){ return OSECS.filter(oCan); }
+function ownerTabs(){ return ownerSecs().concat(oCan('addexp') || oCan('addpur') ? ['add'] : []); }
+function oaccBuild(){
+  var roles = {}, users = {}, d = ownerData(), list = ['Manager', 'Cashier'];
   if (d && d.roles) Object.keys(d.roles).forEach(function(k){ if (list.indexOf(k) < 0 && k !== 'Owner') list.push(k); });
-  list.forEach(function(k){ roles[k] = {}; OSECS.forEach(function(y){ roles[k][y] = oaccOn(k, y); }); });
-  roles[r][x] = !roles[r][x];
-  sync.oacc = {roles:roles, ver:(sync.oacc && sync.oacc.ver) || 0}; saveSync(); render();
+  list.forEach(function(k){ roles[k] = {}; OPERMS.forEach(function(y){ roles[k][y] = oroleOn(k, y); }); });
+  if (sync.oacc && sync.oacc.users) Object.keys(sync.oacc.users).forEach(function(k){ users[k] = sync.oacc.users[k]; });
+  return {roles:roles, users:users, list:list};
+}
+async function oaccPush(B){
+  sync.oacc = {roles:B.roles, users:B.users, ver:(sync.oacc && sync.oacc.ver) || 0}; saveSync(); render();
   try {
     var g = await syncApi('/config/owneracc');
-    var res = await syncApi('/config/owneracc', {method:'PUT', body:{value:{roles:roles, t:Date.now()}, version:(g && g.version) || 0}});
+    var res = await syncApi('/config/owneracc', {method:'PUT', body:{value:{roles:B.roles, users:B.users, t:Date.now()}, version:(g && g.version) || 0}});
     sync.oacc.ver = res.version; saveSync(); toast('Saved for all tablets');
   } catch(e){ toast('Saved on this tablet only. Could not reach the server.'); }
 }
-function vAccess(){
-  var d = ownerData(), list = ['Manager', 'Cashier'];
-  if (d && d.roles) Object.keys(d.roles).forEach(function(k){ if (list.indexOf(k) < 0 && k !== 'Owner') list.push(k); });
-  var h = '<div class="card"><h3>Who sees which reports</h3><p class="hint">Owner always sees everything. Tick what each role may open in this app. People are given their role in the POS under Users and permissions.</p>';
-  h += '<table class="rtab"><tr><th>Role</th>' + OSECS.map(function(x){ return '<th style="font-size:10px">' + ONAMES[x] + '</th>'; }).join('') + '</tr>';
-  h += '<tr><td><b>Owner</b></td>' + OSECS.map(function(){ return '<td>\u2713</td>'; }).join('') + '</tr>';
-  list.forEach(function(r){ h += '<tr><td><b>' + esc(r) + '</b></td>' + OSECS.map(function(x){ return '<td><input type="checkbox" style="width:22px;height:22px" data-act="oacc" data-r="' + esc(r) + '" data-x="' + x + '"' + (oaccOn(r, x) ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; });
-  return h + '</table></div>';
+function oaccSave(r, x){ var B = oaccBuild(); B.roles[r][x] = !B.roles[r][x]; return oaccPush(B); }
+function oaccUser(n, r, x){
+  var B = oaccBuild(), k = ouKey(n), u = B.users[k];
+  if (!u){ u = {}; OPERMS.forEach(function(y){ u[y] = oroleOn(r, y); }); B.users[k] = u; }
+  u[x] = !u[x]; return oaccPush(B);
 }
-function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; if (c === 'access' && myRole() === 'Owner') return c; return s.indexOf(c) >= 0 ? c : (s[0] || 'orders'); }
+function oaccUserReset(n){ var B = oaccBuild(); delete B.users[ouKey(n)]; return oaccPush(B); }
+function vAccess(){
+  var d = ownerData(), B = oaccBuild(), us = (d && d.users || []).filter(function(u){ return u.role !== 'Owner'; });
+  function th(){ return OPERMS.map(function(x){ return '<th style="font-size:10px;line-height:1.1">' + ONAMES[x].replace('Add ', '+') + '</th>'; }).join(''); }
+  var h = '<div class="card"><h3>Roles</h3><p class="hint">What each role may do in this app. Owner always has everything. "+Expense" and "+Purchase" let a person type an entry here; it is added in the POS only after somebody approves it there.</p>';
+  h += '<table class="rtab"><tr><th>Role</th>' + th() + '</tr><tr><td><b>Owner</b></td>' + OPERMS.map(function(){ return '<td>✓</td>'; }).join('') + '</tr>';
+  B.list.forEach(function(r){ h += '<tr><td><b>' + esc(r) + '</b></td>' + OPERMS.map(function(x){ return '<td><input type="checkbox" style="width:22px;height:22px" data-act="oacc" data-r="' + esc(r) + '" data-x="' + x + '"' + (oroleOn(r, x) ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; });
+  h += '</table></div><div class="card"><h3>Particular people</h3><p class="hint">Tick a box here to give one person something different from his role. A dot means the person has his own settings.</p>';
+  if (!us.length) h += oempty('The list of people comes from the POS. It appears after the POS has sent its first update.');
+  else h += '<table class="rtab"><tr><th>Person</th>' + th() + '</tr>' + us.map(function(u){ return '<tr><td><b>' + esc(u.name) + (ouserHas(u.name) ? ' •' : '') + '</b><br><small class="mut">' + esc(u.role) + (ouserHas(u.name) ? ' · <a href="#" data-act="oureset" data-n="' + esc(u.name) + '" style="color:var(--pink-dk)">use role</a>' : '') + '</small></td>' + OPERMS.map(function(x){ return '<td><input type="checkbox" style="width:22px;height:22px" data-act="ouser" data-n="' + esc(u.name) + '" data-r="' + esc(u.role) + '" data-x="' + x + '"' + (ouserOn(u.name, u.role, x) ? ' checked' : '') + '></td>'; }).join('') + '</tr>'; }).join('') + '</table>';
+  return h + '</div>';
+}
+/* ----- add an expense or a purchase (goes to the POS for approval) ----- */
+function oaForm(){ var d = ownerData(), c = d && d.forms && d.forms.xcats[0]; return {date:today(), cat:c ? c.id : '', sub:(c && c.subs[0]) ? c.subs[0].id : '', amt:'', from:'cash', vat:'', who:'', bill:'', note:''}; }
+function opForm(){ return {date:today(), sup:'', inv:'', pay:'cash', vat:'', note:'', lines:[{key:'', qty:'', unit:'pcs', amt:'', rem:''}]}; }
+function osel(f, k, opts, cur, extra){ return '<select class="inp" data-f="' + f + '" data-k="' + k + '"' + (extra || '') + '>' + opts.map(function(o){ return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(cur) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') + '</select>'; }
+function oinp(f, k, v, ph, type, extra){ return '<input class="inp" data-f="' + f + '" data-k="' + k + '" value="' + esc(v) + '" placeholder="' + esc(ph || '') + '"' + (type === 'n' ? ' type="number" inputmode="decimal" step="any"' : type === 'd' ? ' type="date"' : '') + (extra || '') + ' autocomplete="off">'; }
+function oadd(d){
+  var F = d.forms || {xcats:[], sups:[], items:[]}, v = S.oaw || (oCan('addexp') ? 'exp' : 'pur'), h = '';
+  var seg = '<div class="seg rseg" style="margin-bottom:10px">' + (oCan('addexp') ? '<button data-act="oaw" data-v="exp" aria-pressed="' + (v === 'exp') + '">Expense</button>' : '') + (oCan('addpur') ? '<button data-act="oaw" data-v="pur" aria-pressed="' + (v === 'pur') + '">Purchase</button>' : '') + '</div>';
+  if (S.osent) h += '<div class="card" style="background:#e9f7ef"><b>Sent.</b> It is waiting for approval in the POS (' + esc(S.osent) + ').</div>';
+  if (v === 'exp'){
+    var f = S.oae = S.oae || oaForm(), cat = F.xcats.filter(function(c){ return c.id === f.cat; })[0];
+    h += '<div class="card"><h3>New expense</h3><div class="shopf">'
+      + '<label>Date' + oinp('oae', 'date', f.date, '', 'd') + '</label>'
+      + '<label>Category' + osel('oae', 'cat', F.xcats.map(function(c){ return [c.id, c.name]; }), f.cat) + '</label>'
+      + (cat && cat.subs.length ? '<label>Sub-category' + osel('oae', 'sub', cat.subs.map(function(x){ return [x.id, x.name]; }), f.sub) + '</label>' : '')
+      + '<label>Amount (AED, with VAT)' + oinp('oae', 'amt', f.amt, '0', 'n') + '</label><label>VAT included (AED, optional)' + oinp('oae', 'vat', f.vat, '0', 'n') + '</label>'
+      + '<label>Paid from' + osel('oae', 'from', [['cash', 'Counter cash'], ['bank', 'Bank']], f.from) + '</label>'
+      + '<label>Paid to (optional)' + oinp('oae', 'who', f.who, 'Shop or person') + '</label><label>Bill number (optional)' + oinp('oae', 'bill', f.bill, '') + '</label>'
+      + '<label>Note' + oinp('oae', 'note', f.note, '') + '</label></div><div class="btns" style="margin-top:12px"><button class="btn primary" data-act="oasend" data-v="exp">Send to POS</button></div></div>';
+  } else {
+    var p = S.oap = S.oap || opForm(), items = [['', 'Choose item']].concat(F.items.map(function(i){ return [i.key, i.name]; }));
+    h += '<div class="card"><h3>New purchase</h3><div class="shopf">'
+      + '<label>Date' + oinp('oap', 'date', p.date, '', 'd') + '</label>'
+      + '<label>Supplier' + osel('oap', 'sup', [['', 'No supplier']].concat(F.sups.map(function(x){ return [x.id, x.name]; })), p.sup) + '</label>'
+      + '<label>Invoice number (optional)' + oinp('oap', 'inv', p.inv, '') + '</label>'
+      + '<label>Paid by' + osel('oap', 'pay', [['cash', 'Counter cash'], ['bank', 'Bank'], ['credit', 'On credit (pay later)']], p.pay) + '</label></div>';
+    p.lines.forEach(function(l, i){
+      var it = F.items.filter(function(x){ return x.key === l.key; })[0], un = it ? it.un : [['pcs', 'Pieces']];
+      h += '<div class="card" style="margin:10px 0 0;padding:10px;background:#faf5f8"><div class="shopf">'
+        + '<label>Item' + osel('opl', 'key', items, l.key, ' data-i="' + i + '"') + '</label>'
+        + '<label>Quantity' + oinp('opl', 'qty', l.qty, '0', 'n', ' data-i="' + i + '"') + '</label>'
+        + '<label>Unit' + osel('opl', 'unit', un, l.unit, ' data-i="' + i + '"') + '</label>'
+        + '<label>Cost (AED)' + oinp('opl', 'amt', l.amt, '0', 'n', ' data-i="' + i + '"') + '</label>'
+        + '<label>Remarks (e.g. flavour)' + oinp('opl', 'rem', l.rem, '', '', ' data-i="' + i + '"') + '</label></div>'
+        + (p.lines.length > 1 ? '<button class="btn ghost sm" data-act="oplrm" data-i="' + i + '" style="margin-top:8px">Remove line</button>' : '') + '</div>';
+    });
+    h += '<div class="btns" style="margin:10px 0"><button class="btn ghost" data-act="opladd">+ Add another item</button></div><div class="shopf"><label>VAT (AED, optional)' + oinp('oap', 'vat', p.vat, '0', 'n') + '</label><label>Note' + oinp('oap', 'note', p.note, '') + '</label></div>'
+      + '<div class="btns" style="margin-top:12px"><button class="btn primary" data-act="oasend" data-v="pur">Send to POS</button></div></div>';
+  }
+  return seg + h + '<p class="hint" style="padding:0 6px">Nothing changes in the POS books until a person with permission approves it there.</p>';
+}
+function oaSend(kind){
+  var d = ownerData(), who = (sync.user && sync.user.name) || '', e;
+  if (!oCan(kind === 'exp' ? 'addexp' : 'addpur')){ toast('Not allowed'); return; }
+  if (kind === 'exp'){
+    var f = S.oae; if (!f || !f.date || !(parseFloat(f.amt) > 0) || !f.cat){ toast('Choose the category and type the amount'); return; }
+    e = {id:uuid(), kind:'expense', by:who, t:Date.now(), data:{date:f.date, cat:f.cat, sub:f.sub, amt:parseFloat(f.amt), vat:parseFloat(f.vat) || 0, from:f.from, who:f.who.trim(), bill:f.bill.trim(), note:f.note.trim()}};
+    S.oae = null; S.osent = 'expense AED ' + fm(e.data.amt);
+  } else {
+    var p = S.oap; if (!p || !p.date || !p.lines.length || p.lines.some(function(l){ return !l.key || !(parseFloat(l.qty) > 0) || l.amt === '' || !(parseFloat(l.amt) >= 0); })){ toast('Each line needs an item, quantity and cost'); return; }
+    if (p.pay === 'credit' && !p.sup){ toast('Choose the supplier for a credit purchase'); return; }
+    e = {id:uuid(), kind:'purchase', by:who, t:Date.now(), data:{date:p.date, sup:p.sup, inv:p.inv.trim(), pay:p.pay, vat:parseFloat(p.vat) || 0, note:p.note.trim(), lines:p.lines.map(function(l){ return {key:l.key, qty:parseFloat(l.qty), unit:l.unit, amt:parseFloat(l.amt), rem:l.rem.trim()}; })}};
+    S.oap = null; S.osent = 'purchase AED ' + fm(e.data.lines.reduce(function(a, l){ return a + l.amt; }, 0) + e.data.vat);
+  }
+  queueEvent('mob_entry', e); tAudit('Mobile entry sent', e.kind + ' · ' + S.osent, 1); toast('Sent to the POS');
+}
+function ownerSec(){ var s = ownerSecs(), c = S.osec; if (c === 'orders' && canTab('reports')) return c; if (c === 'access' && myRole() === 'Owner') return c; if (c === 'add' && ownerTabs().indexOf('add') >= 0) return c; return s.indexOf(c) >= 0 ? c : (s[0] || (ownerTabs().indexOf('add') >= 0 ? 'add' : 'orders')); }
 async function ownerFetch(force){
-  try { if (syncOn()){ var ga = await syncApi('/config/owneracc'); if (ga && ga.value && ga.value.roles && (ga.version || 0) !== ((sync.oacc && sync.oacc.ver) || 0)){ sync.oacc = {roles:ga.value.roles, ver:ga.version}; saveSync(); } } } catch(e){ if (e.status === 401) throw e; }
-  if (!syncOn() || (!ownerSecs().length && myRole() !== 'Manager')) return false;
+  try { if (syncOn()){ var ga = await syncApi('/config/owneracc'); if (ga && ga.value && ga.value.roles && (ga.version || 0) !== ((sync.oacc && sync.oacc.ver) || 0)){ sync.oacc = {roles:ga.value.roles, users:ga.value.users || {}, ver:ga.version}; saveSync(); } } } catch(e){ if (e.status === 401) throw e; }
+  if (!syncOn() || (!ownerTabs().length && myRole() !== 'Manager')) return false;
   try {
     var g = await syncApi('/config/ownerrep');
     if (g && g.value && g.value.v && (force || (g.version || 0) !== ((sync.orep && sync.orep.ver) || 0))){ sync.orep = {ver:g.version || 0, data:g.value, at:Date.now()}; saveSync(); return true; }
@@ -692,9 +756,9 @@ function ocard(title, body, note){ return '<div class="card"><h3>' + title + '</
 function oempty(t){ return '<p class="hint" style="margin:0">' + t + '</p>'; }
 function oHead(){
   var d = ownerData(), secs = ownerSecs(), cur = ownerSec(), names = ONAMES;
-  var all = secs.concat(canTab('reports') ? ['orders'] : []).concat(myRole() === 'Owner' ? ['access'] : []);
+  var all = ownerTabs().concat(canTab('reports') ? ['orders'] : []).concat(myRole() === 'Owner' ? ['access'] : []);
   var h = '<div class="osegs">' + all.map(function(s){ return '<button data-act="osec" data-v="' + s + '" aria-pressed="' + (s === cur) + '">' + names[s] + '</button>'; }).join('') + '</div>';
-  if (cur !== 'orders' && cur !== 'access'){
+  if (cur !== 'orders' && cur !== 'access' && cur !== 'add'){
     var age = d ? Date.now() - d.t : 0;
     h += '<div class="ostamp' + (d && age > 1800000 ? ' old' : '') + '">' + (d ? 'POS data of ' + otime(d.t) + (age > 1800000 ? ' · the POS has not sent anything for a while' : '') : 'Waiting for the first update from the POS') + ' <button data-act="orefresh">Refresh</button></div>';
   }
@@ -772,13 +836,14 @@ function ownerText(d){
 function vOwner(){
   var d = ownerData(), cur = ownerSec(), body;
   if (cur === 'orders') return null;
+  if (cur === 'add') return '<div class="page">' + oHead() + (d ? oadd(d) : '<div class="empty">The lists (categories, suppliers, items) come from the POS. Tap Refresh in a moment.</div>') + '</div>';
   if (cur === 'access') return '<div class="page">' + oHead() + vAccess() + '</div>';
   if (!d) body = '<div class="empty">No data yet. The POS sends it every minute while it is open and connected. Tap Refresh in a moment.</div>';
   else body = cur === 'home' ? oHome(d) : cur === 'sales' ? oSales(d) : cur === 'control' ? oControl(d) : cur === 'stock' ? oStock(d) : oMoney(d);
   return '<div class="page">' + oHead() + body + '</div>';
 }
 function vReports(){
-  var ov = ownerSecs().length || ownerSec() !== 'orders' ? vOwner() : null; if (ov) return ov;
+  var ov = ownerTabs().length || ownerSec() !== 'orders' ? vOwner() : null; if (ov) return ov;
   var day = repDay(), span = S.repSpan || 1, r = reportData(day, span), n = r.os.length;
   var mx = Math.max.apply(null, r.hours.concat([1]));
   var catRows = Object.keys(r.cats).sort(function(a,b){ return r.cats[b].a - r.cats[a].a; }).map(function(c){ return '<tr><td>'+esc(c)+'</td><td>'+r.cats[c].q+'</td><td>'+money(r.cats[c].a)+'</td></tr>'; }).join('');
@@ -789,7 +854,7 @@ function vReports(){
   var dlab = day === today() ? 'Today' : new Date(day + 'T12:00:00').toLocaleDateString([], {weekday:'short', day:'numeric', month:'short'});
   function bar(label, v, tot){ var pc = tot ? Math.round(v / tot * 100) : 0; return '<div class="prog"><div class="pl"><span>'+label+'</span><b>'+v+' of '+tot+'</b></div><div class="pt"><i style="width:'+pc+'%"></i></div></div>'; }
   function pay(label, x){ return '<div class="pay"><small>'+label+'</small><b>'+money(x.a)+'</b><em>'+x.n+(x.n === 1 ? ' order' : ' orders')+'</em></div>'; }
-  return '<div class="page">' + (ownerSecs().length ? oHead() : '') + '<div class="rhead"><div class="seg rseg"><button data-act="repspan" data-v="1" aria-pressed="'+(span===1)+'">Day</button><button data-act="repspan" data-v="7" aria-pressed="'+(span===7)+'">7 days</button><button data-act="repspan" data-v="30" aria-pressed="'+(span===30)+'">30 days</button></div>'
+  return '<div class="page">' + (ownerTabs().length ? oHead() : '') + '<div class="rhead"><div class="seg rseg"><button data-act="repspan" data-v="1" aria-pressed="'+(span===1)+'">Day</button><button data-act="repspan" data-v="7" aria-pressed="'+(span===7)+'">7 days</button><button data-act="repspan" data-v="30" aria-pressed="'+(span===30)+'">30 days</button></div>'
     + '<div class="rnav"><button class="rb" data-act="repday" data-v="-1" aria-label="Previous day">◀</button><button class="rdate" data-act="repday" data-v="0">'+dlab+(span > 1 ? '<small>last '+span+' days up to this date</small>' : '')+'</button><button class="rb" data-act="repday" data-v="1" aria-label="Next day">▶</button><button class="rb" data-act="copyrep" aria-label="Copy report">'+IC.copy+'</button></div></div>'
     + (n ? '<div class="hero"><small>Sales</small><b><i>AED</i> '+money(r.amt)+'</b><div class="hsub"><span><b>'+n+'</b> orders</span><span><b>'+r.qty+'</b> items</span><span>avg <b>'+money(r.amt / n)+'</b></span></div></div>'
       + '<div class="pays">'+pay('Cash', r.pay.cash)+pay('Card', r.pay.card)+pay('Credit', r.pay.credit)+pay('Unpaid', r.pay.unpaid)+'</div>'
@@ -1145,6 +1210,14 @@ document.addEventListener('input', function(e){
   if (t.id === 'cancelwhy'){ S.cancelText = t.value; var cb = document.querySelector('[data-act=cancelyes]'); if (cb) cb.disabled = t.value.trim().length < 3; return; }
   if (t.id === 'pin'){ S.pinTry = t.value; return; }
   if (t.id === 'newpin'){ if (t.value.trim()){ pin = t.value.trim(); lsSet(K_PIN, pin); } return; }
+  if (f === 'oae' || f === 'oap' || f === 'opl'){
+    var tgt = f === 'oae' ? S.oae : S.oap, k = t.dataset.k, v = t.value, dd = ownerData(), F = (dd && dd.forms) || {xcats:[], items:[]}, rr = false;
+    if (!tgt) return;
+    if (f === 'opl'){ var ln = tgt.lines[+t.dataset.i]; if (!ln) return; ln[k] = v; if (k === 'key'){ var it = F.items.filter(function(x){ return x.key === v; })[0]; ln.unit = it && it.un[0] ? it.un[0][0] : 'pcs'; rr = true; } }
+    else { tgt[k] = v; if (f === 'oae' && k === 'cat'){ var cc = F.xcats.filter(function(x){ return x.id === v; })[0]; tgt.sub = cc && cc.subs[0] ? cc.subs[0].id : ''; rr = true; } }
+    if (t.tagName === 'SELECT') rr = true;
+    if (rr) render(); return;
+  }
   if (!f) return;
   var c = edCat(), item = t.dataset.id ? byId(c.items, t.dataset.id) : null;
   if (f === 'cname') c.name = t.value;
@@ -1313,6 +1386,12 @@ document.addEventListener('click', function(e){
     case 'repspan': S.repSpan = +d.v; break;
     case 'osec': S.osec = d.v; break;
     case 'oacc': oaccSave(d.r, d.x); return;
+    case 'ouser': oaccUser(d.n, d.r, d.x); return;
+    case 'oureset': if (e && e.preventDefault) e.preventDefault(); oaccUserReset(d.n); return;
+    case 'oaw': S.oaw = d.v; S.osent = ''; break;
+    case 'opladd': S.oap.lines.push({key:'', qty:'', unit:'pcs', amt:'', rem:''}); break;
+    case 'oplrm': S.oap.lines.splice(+d.i, 1); break;
+    case 'oasend': oaSend(d.v); break;
     case 'orng': S.orng = d.v; break;
     case 'orefresh': ownerFetch(true).then(function(){ toast('Updated'); render(); }, function(){ toast('Cannot reach the server'); }); toast('Refreshing...'); return;
     case 'oshare': if (ownerData()){ var tx = ownerText(ownerData()); if (navigator.share){ navigator.share({text:tx}).catch(function(){}); } else { try { navigator.clipboard.writeText(tx).then(function(){ toast('Summary copied'); }); } catch(err){ toast('Copy not allowed here'); } } } return;
@@ -1599,7 +1678,7 @@ function canTab(id){
   if (id === 'totals') return false;
   if (r === 'Owner') return true;
   if (id === 'menu' || id === 'settings') return false;
-  if (id === 'reports') return r === 'Manager' || ownerSecs().length > 0;
+  if (id === 'reports') return r === 'Manager' || ownerTabs().length > 0;
   return true;
 }
 async function signOut(){
