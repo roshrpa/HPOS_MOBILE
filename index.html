@@ -1631,7 +1631,7 @@ function canTab(id){
   var r = myRole();
   if (id === 'totals') return false;
   if (r === 'Owner') return true;
-  if (id === 'menu' || id === 'settings') return false;
+  if (id === 'menu' || id === 'settings') return oCan(id);   // ticked for this person in the POS (Users → Mobile app access)
   if (id === 'reports') return ownerTabs().length > 0 || (r === 'Manager' && S.osec === 'orders');
   return true;
 }
