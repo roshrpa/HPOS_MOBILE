@@ -1583,9 +1583,18 @@ function canTab(id){
   return true;
 }
 async function signOut(){
-  if (sync.outbox && sync.outbox.length){ toast('Some changes are not sent to the server yet. Connect to the internet, press Sync now, then sign out.'); return; }
-  tAudit('Signed out', ''); try { await runSync(); } catch(e){}
-  if (sync.outbox && sync.outbox.length){ toast('Could not send the sign-out record. Check the internet and try again.'); return; }
+  var force = !!S.signForce;
+  if (!force){
+    for (var w = 0; w < 40 && syncBusy; w++) await new Promise(function(r){ setTimeout(r, 250); });   // let a running sync finish first
+    if (sync.outbox && sync.outbox.length){ try { await runSync(); } catch(e){} }
+    if (sync.outbox && sync.outbox.length){
+      S.signForce = true; render();
+      toast('Some changes are not sent yet (' + sync.outbox.length + '). Tap Sign out again to sign out anyway. They will be sent when you sign in again.');
+      return;
+    }
+    tAudit('Signed out', ''); try { await runSync(); } catch(e){}
+  }
+  S.signForce = false;
   sync.keep = sync.token || sync.keep; sync.token = ''; sync.user = null; saveSync();
   S.unlocked = false; S.nav = false; S.tab = 'new'; S.cart = []; render();
 }
