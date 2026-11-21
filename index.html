@@ -513,6 +513,32 @@ var saveT;
 function saveMenu(){
   clearTimeout(saveT);
   saveT = setTimeout(function(){ if (!lsSet(K_MENU, JSON.stringify(menu))) toast('Could not save. Storage is full or blocked.'); menuEdited(); }, 300);
+  clearTimeout(menuAuditT); menuAuditT = setTimeout(auditMenu, 2500);
+}
+/* Every price or availability change made in the Edit menu is recorded in the Audit log with the name of the person, like in the POS */
+var menuAuditT;
+function menuSnap(){
+  var o = {};
+  try { menu.forEach(function(c){ c.items.forEach(function(it){
+    c.sizes.forEach(function(z){ var k = c.name + ' / ' + it.name + (c.sizes.length > 1 ? ' / ' + z.label : ''); o[k] = priceOf(it, z);
+      chans().forEach(function(h){ o['[' + h.name + '] ' + k] = chPrice(it, z, h.id); }); });
+    o[c.name + ' / ' + it.name + ' (off)'] = it.off ? 1 : 0;
+    chans().forEach(function(h){ o['[' + h.name + '] ' + c.name + ' / ' + it.name + ' (off)'] = chHidden(it, h.id) ? 1 : 0; });
+  }); }); } catch(e){}
+  return o;
+}
+var menuPrev = null;
+function auditMenu(){
+  var m = menuSnap(), k;
+  if (menuPrev){
+    function au(act, d, flag){ try { var r = {id:uuid(), t:Date.now(), u:(sync.user && sync.user.name) || '', uid:'', cat:'Menu', act:act, d:d + (sync.dev ? ' [' + sync.dev + ']' : '')}; if (flag) r.flag = 1; queueEvent('audit', r); } catch(e){} }
+    for (k in m){
+      if (!(k in menuPrev)){ if (!/\(off\)$/.test(k)) au('Item or size added', k + ' at AED ' + money(m[k])); }
+      else if (m[k] !== menuPrev[k]){ if (/\(off\)$/.test(k)) au(m[k] ? 'Item switched off' : 'Item switched on', k.replace(' (off)', '')); else au('Price changed', k + ': AED ' + money(menuPrev[k]) + ' to AED ' + money(m[k]), true); }
+    }
+    for (k in menuPrev){ if (!(k in m) && !/\(off\)$/.test(k) && k.charAt(0) !== '[') au('Item or size removed', k, true); }
+  }
+  menuPrev = m;
 }
 
 /* ---------- State ---------- */
@@ -545,6 +571,7 @@ function priceOf(item, size){
   var o = item.prices && item.prices[size.id];
   return (o !== undefined && o !== null && o !== '' && !isNaN(+o)) ? +o : (+size.price || 0);
 }
+try { menuPrev = menuSnap(); } catch(e){}   // starting point for the menu audit
 function rangeOf(c, item){
   var p = c.sizes.map(function(s){ return chPrice(item, s, S.ch); });
   return {lo:Math.min.apply(null, p), hi:Math.max.apply(null, p)};
@@ -1006,7 +1033,7 @@ function chPricesCard(c){
     + '<div style="overflow:auto"><table class="chtbl">'+head+'<tbody>'+rows+'</tbody></table></div></div>';
 }
 function vMenu(){
-  if (!S.unlocked && myRole() !== 'Owner'){
+  if (false){   /* the Menu tick in the POS (Users → Mobile app access) is the permission; no second PIN */
     return '<div class="page"><div class="lock card"><h2>Menu editor</h2><p>Enter the PIN to edit the menu.</p>'
       + '<input id="pin" class="inp" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" value="'+esc(S.pinTry)+'" style="text-align:center;font-size:22px;letter-spacing:6px">'
       + (S.pinErr ? '<p style="color:var(--pink-dk);margin:10px 0 0">Wrong PIN. Try again.</p>' : '')
@@ -1536,7 +1563,7 @@ async function runSync(){
 var K_STOCK = 'hollywood_stock_v1';
 var remoteStock = (function(){ try { var r = JSON.parse(lsGet(K_STOCK)); if (r && r.items) return r; } catch(e){} return {items:{}, allowZero:true}; })();
 function applyServerMenu(list){
-  menu = list; lsSet(K_MENU, JSON.stringify(menu));
+  menu = list; lsSet(K_MENU, JSON.stringify(menu)); try { menuPrev = menuSnap(); } catch(e){}   /* a menu that came from another device is not this person's edit */
   if (!byId(menu, S.edCat)) S.edCat = menu[0].id;
   if (!byId(menu, S.cat)) S.cat = menu[0].id;
 }
