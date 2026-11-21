@@ -1109,7 +1109,7 @@ function vSheets(){
 }
 
 var lastSig = '', lastTab = '', KEEPALWAYS = ['.rail', '.ed .list', 'nav.tabs'];
-var SCROLLERS = ['nav.tabs', '.items', '.rail', '.lines', '.page', '.ed .main', '.ed .list', '.sheet'];
+var SCROLLERS = ['nav.tabs', '.osegs', '.items', '.rail', '.lines', '.page', '.ed .main', '.ed .list', '.sheet'];
 function render(){
   var app = document.getElementById('app'), keep = {};
   if (licBlocked()){ app.innerHTML = vLicBlock(); return; }
@@ -1135,6 +1135,8 @@ function render(){
     var e = document.querySelector(s), k = keep[s];
     if (e && k && (k[0] === sig || (KEEPALWAYS.indexOf(s) >= 0 && k[3] === S.tab))){ e.scrollTop = k[1]; e.scrollLeft = k[2]; }
   });
+  var osg = document.querySelector('.osegs'), osa = osg && osg.querySelector('[aria-pressed="true"]');
+  if (osa){ var ol = osa.offsetLeft, orr = ol + osa.offsetWidth; if (ol < osg.scrollLeft + 8) osg.scrollLeft = Math.max(0, ol - 16); else if (orr > osg.scrollLeft + osg.clientWidth - 8) osg.scrollLeft = orr - osg.clientWidth + 16; }
   if (wantAnim){ var itl = document.querySelector('.items'); if (itl) itl.classList.add('in-' + wantAnim); }
   if (wantReveal){
     var rl = document.querySelector('.rail'), ac = rl && rl.querySelector('[aria-pressed="true"]');
