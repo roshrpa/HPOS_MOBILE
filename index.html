@@ -634,7 +634,7 @@ function reportText(day){
 }
 /* ---------- Owner reports (read only). The POS publishes a summary; the sections shown follow the user's POS permissions ---------- */
 function ownerData(){ return sync.orep && sync.orep.data ? sync.orep.data : null; }
-var OSECS = ['home', 'sales', 'control', 'stock', 'purch', 'exp', 'money'], OPERMS = OSECS, ONAMES = {home:'Dashboard', sales:'Sales', control:'Audit', stock:'Stock', purch:'Purchases', exp:'Expenses', money:'Accounts', orders:'Orders', access:'Access', add:'Add', addexp:'Add expense', addpur:'Add purchase'};
+var OSECS = ['home', 'control', 'stock', 'purch', 'exp', 'money'], OPERMS = OSECS, ONAMES = {home:'Dashboard', control:'Audit', stock:'Stock', purch:'Purchases', exp:'Expenses', money:'Accounts', orders:'Orders', access:'Access', add:'Add', addexp:'Add expense', addpur:'Add purchase'};
 function ouKey(n){ return String(n || '').trim().toLowerCase(); }
 function oDefault(r, x){
   var d = ownerData(); if (r === 'Cashier' || !d || !d.roles || !d.roles[r] || x === 'addexp' || x === 'addpur') return false;
@@ -643,7 +643,7 @@ function oDefault(r, x){
 function oroleOn(r, x){ var a = sync.oacc && sync.oacc.roles; return a && a[r] ? !!a[r][x] : oDefault(r, x); }
 function ouserHas(n){ return !!(sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]); }
 function ouserOn(n, r, x){ var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(n)]; return u ? !!u[x] : oroleOn(r, x); }
-function oCan(x){ if (myRole() === 'Owner') return true; var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(sync.user && sync.user.name)]; return !!(u && u[x]); }
+function oCan(x){ if (myRole() === 'Owner') return true; var u = sync.oacc && sync.oacc.users && sync.oacc.users[ouKey(sync.user && sync.user.name)]; return !!(u && (u[x] || (x === 'home' && u.sales))); }
 function ownerSecs(){ return OSECS.filter(oCan); }
 function ownerTabs(){ return ownerSecs(); }
 function oaccBuild(){
@@ -700,17 +700,20 @@ function oHome(d){
   if (fresh && !C.morningDone && new Date().getHours() >= 11) al.push(['Morning cup count not done today', 'control']);
   if (d.stock.low) al.push([d.stock.low + ' raw material(s) below minimum', 'stock']);
   var secs = ownerSecs();
-  return '<div class="hero"><small>Net sales ' + (fresh ? 'today' : d.day) + '</small><b><i>AED</i> ' + fm(t.net) + '</b><div class="hsub"><span><b>' + t.bills + '</b> bills</span><span>avg <b>' + fm(t.bills ? t.net / t.bills : 0) + '</b></span></div><div class="hsub" style="margin-top:6px">' + odelta(t.net, y.net, 'vs yesterday').replace(/class="od/, 'style="color:#fff" class="od') + odelta(t.net, w.net ? w.net : s.lastWd.net, 'vs last week').replace(/class="od/, 'style="color:#fff" class="od') + '</div></div>'
-    + '<div class="pays"><div class="pay"><small>Cash</small><b>' + fm(t.pay.cash) + '</b></div><div class="pay"><small>Card</small><b>' + fm(t.pay.card) + '</b></div><div class="pay"><small>Online</small><b>' + fm(t.pay.agg) + '</b></div><div class="pay"><small>Credit</small><b>' + fm(t.pay.credit) + '</b></div><div class="pay"><small>Discounts</small><b>' + fm(t.disc) + '</b></div><div class="pay"><small>Yesterday</small><b>' + fm(y.net) + '</b></div></div>'
+  var k = S.orng || 'today', r = s[k], rl = {today:(fresh ? 'today' : d.day), yesterday:'yesterday', week:'last 7 days', month:'this month', last:'last month'}[k];
+  var cmp = k === 'today' ? '<div class="hsub" style="margin-top:6px">' + odelta(t.net, y.net, 'vs yesterday').replace(/class="od/, 'style="color:#fff" class="od') + odelta(t.net, w.net, 'vs last week').replace(/class="od/, 'style="color:#fff" class="od') + '</div>' : '';
+  return oRange() + '<div class="hero"><small>Net sales ' + rl + '</small><b><i>AED</i> ' + fm(r.net) + '</b><div class="hsub"><span><b>' + r.bills + '</b> bills</span><span>avg <b>' + fm(r.bills ? r.net / r.bills : 0) + '</b></span></div>' + cmp + '</div>'
+    + '<div class="pays"><div class="pay"><small>Cash</small><b>' + fm(r.pay.cash) + '</b></div><div class="pay"><small>Card</small><b>' + fm(r.pay.card) + '</b></div><div class="pay"><small>Online</small><b>' + fm(r.pay.agg) + '</b></div><div class="pay"><small>Credit</small><b>' + fm(r.pay.credit) + '</b></div><div class="pay"><small>Discounts</small><b>' + fm(r.disc) + '</b></div><div class="pay"><small>VAT</small><b>' + fm(r.vat) + '</b></div></div>'
     + (function(){ try { var tr = reportData(today(), 1), n = tr.os.length; return n ? ocard('This tablet\'s orders today', '<div class="prog"><div class="pl"><span>Delivered</span><b>' + tr.delivered + ' of ' + n + '</b></div><div class="pt"><i style="width:' + Math.round(tr.delivered / n * 100) + '%"></i></div></div>') : ''; } catch(er){ return ''; } })()
     + ocard('Needs attention', al.length ? al.map(function(a){ return '<button class="oal" data-act="osec" data-v="' + a[1] + '"' + (secs.indexOf(a[1]) < 0 ? ' disabled' : '') + '><span>●</span>' + esc(a[0]) + '</button>'; }).join('') : oempty('Nothing red. All good.'))
-    + (secs.indexOf('sales') >= 0 ? ocard('Last 30 days', obars(d.daily.map(function(x){ return x[1]; }), d.daily.map(function(x, i){ return i % 5 === 0 ? x[0].slice(3) : ''; }), 80)) : '');
+    + oSales(d)
+    + (true ? ocard('Last 30 days', obars(d.daily.map(function(x){ return x[1]; }), d.daily.map(function(x, i){ return i % 5 === 0 ? x[0].slice(3) : ''; }), 80)) : '');
 }
 function oSales(d){
   var k = S.orng || 'today', r = d.sales[k];
   var hrs = r.hours, f = 24, l = -1; hrs.forEach(function(v, i){ if (v){ if (i < f) f = i; if (i > l) l = i; } });
   var hl = []; for (var h = f; h <= l; h++) hl.push(h);
-  return oRange() + ocard('Summary', '<table class="rtab"><tr><td>Net sales</td><td><b>AED ' + fm(r.net) + '</b></td></tr><tr><td>Bills</td><td>' + r.bills + '</td></tr><tr><td>Average bill</td><td>' + fm(r.bills ? r.net / r.bills : 0) + '</td></tr><tr><td>Discounts</td><td>' + fm(r.disc) + '</td></tr><tr><td>VAT included</td><td>' + fm(r.vat) + '</td></tr></table>')
+  return ''
     + (r.chan.length ? ocard('Online channels', '<table class="rtab"><tr><th>Channel</th><th>Bills</th><th>AED</th></tr>' + r.chan.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>') : '')
     + ocard('Sales by category', r.cat.length ? '<table class="rtab"><tr><th>Category</th><th>Items</th><th>AED</th></tr>' + r.cat.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>' : oempty('No sales.'))
     + ocard('Top items', r.items.length ? '<table class="rtab"><tr><th>Item</th><th>Qty</th><th>AED</th></tr>' + r.items.map(function(c){ return otab(c[0], [c[2], fm(c[1])]); }).join('') + '</table>' : oempty('No sales.'))
@@ -795,7 +798,7 @@ function vOwner(){
   var d = ownerData(), cur = ownerSec(), body;
   if (cur === 'orders') return null;
   if (!d) body = '<div class="empty">No data yet. The POS sends it every minute while it is open and connected. Tap Refresh in a moment.</div>';
-  else body = cur === 'home' ? oHome(d) : cur === 'sales' ? oSales(d) : cur === 'control' ? oControl(d) : cur === 'stock' ? oStock(d) : cur === 'purch' ? oPurch(d) : cur === 'exp' ? oExp(d) : oMoney(d);
+  else body = cur === 'home' ? oHome(d) : cur === 'control' ? oControl(d) : cur === 'stock' ? oStock(d) : cur === 'purch' ? oPurch(d) : cur === 'exp' ? oExp(d) : oMoney(d);
   return '<div class="page">' + oHead() + body + '</div>' + (d && S.odet ? oDetail(d) : '');
 }
 function vReports(){
