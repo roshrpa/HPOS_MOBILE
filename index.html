@@ -946,7 +946,7 @@ function vOrders(){
     }).join('');
     if (o.cancelled){
       return head + '<article class="ord cancelled"><div class="hd"><span class="no">#'+orderLabel(o)+'</span><span class="pill x">Cancelled</span><span class="meta">'+when+'</span></div>'
-        + '<ul>'+li+'</ul><div class="why"><b>Reason:</b> '+esc(o.cancelled.reason)+'<small>'+new Date(o.cancelled.t).toLocaleString([], {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})+'</small></div>'
+        + '<ul>'+li+'</ul><div class="why"><b>Reason:</b> '+esc(o.cancelled.reason)+(o.cancelled.by ? ' · '+esc(o.cancelled.by) : '')+'<small>'+new Date(o.cancelled.t).toLocaleString([], {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})+'</small></div>'
         + '<div class="sum"><span>Total (not counted)</span><span>AED '+money(totalAmt(o.lines))+'</span></div></article>';
     }
     return head + '<article class="ord'+(o.delivered?' done':'')+'"><div class="hd"><span class="no">#'+orderLabel(o)+'</span><span class="pill '+(o.delivered?'d':'p')+'">'+(o.delivered?'Delivered':'Waiting')+'</span><button class="chip pay'+(o.pay?'':' unpaid')+'" data-act="cyclepay" data-no="'+o.id+'">'+payText(o)+'</button><span class="meta">'+when+'</span></div>'
@@ -1305,7 +1305,7 @@ document.addEventListener('click', function(e){
     case 'cancelno': S.cancelAsk = null; S.cancelText = ''; break;
     case 'cancelyes':
       var why = (S.cancelText || '').trim(); if (why.length < 3) return;
-      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.cancelled = {reason:why, t:Date.now()}; if (isUuid(o.id)) queueEvent('order_cancel', {id:o.id, reason:why, t:o.cancelled.t}); tAudit('Order cancelled', '#' + orderLabel(o) + ' · ' + why, 1); } });
+      db.orders.forEach(function(o){ if (String(o.id) === d.no){ o.cancelled = {reason:why, t:Date.now(), by:(sync.user ? sync.user.name : '')}; if (isUuid(o.id)) queueEvent('order_cancel', {id:o.id, reason:why, t:o.cancelled.t, by:o.cancelled.by}); tAudit('Order cancelled', '#' + orderLabel(o) + ' · ' + why, 1); } });
       S.cancelAsk = null; S.cancelText = ''; saveOrders(); toast('Order cancelled'); break;
     case 'liccheck': licCheck(); return;
     case 'licdis': try { sessionStorage.setItem('hp_licdis_' + today(), '1'); } catch(er){} render(); return;
@@ -1730,7 +1730,7 @@ function applyRemote(events){
     } else if (e.type === 'order_update'){
       if (o){ o.lines = p.lines || o.lines; o.note = p.note || ''; if (p.pay !== undefined) o.pay = p.pay; if (p.ch !== undefined) o.ch = p.ch || ''; if (p.ref !== undefined) o.ref = p.ref || ''; if (p.credit !== undefined) o.credit = p.credit || undefined; if (p.dlv !== undefined) o.dlv = p.dlv || undefined; changed = true; }
     } else if (e.type === 'order_cancel'){
-      if (o){ o.cancelled = {reason:p.reason || '(cancelled on another device)', t:p.t || e.t}; changed = true; }
+      if (o){ o.cancelled = {reason:p.reason || '(cancelled on another device)', t:p.t || e.t, by:p.by || ''}; changed = true; }
     } else if (e.type === 'order_done'){
       if (o){ o.delivered = o.entered = p.done !== false; changed = true; }
     } else if (e.type === 'order_delivered'){
