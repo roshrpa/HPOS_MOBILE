@@ -1179,7 +1179,7 @@ function render(){
   var wantAnim = S.anim; S.anim = null;
   app.innerHTML = vHeader() + licBanner() + '<main>' + body + '</main>' + vSheets() + (S.nav ? vDrawer() : '');
   paintSync();
-  if (S.autoPrint && document.getElementById('slip')){ S.autoPrint = false; setTimeout(function(){ try { window.print(); } catch(e){ toast('Printing is not available here'); } }, 300); }
+  if (S.autoPrint && document.getElementById('slip')){ S.autoPrint = false; setTimeout(function(){ try { window.print(); } catch(e){ toast('Printing is not available here'); } S.slip = null; render(); }, 300); }
   SCROLLERS.forEach(function(s){
     var e = document.querySelector(s), k = keep[s];
     if (e && k && (k[0] === sig || (KEEPALWAYS.indexOf(s) >= 0 && k[3] === S.tab))){ e.scrollTop = k[1]; e.scrollLeft = k[2]; }
@@ -1340,7 +1340,7 @@ document.addEventListener('click', function(e){
     case 'exityes': try { window.Capacitor.Plugins.App.exitApp(); } catch(e){} return;
     case 'slip': S.slip = d.no; break;
     case 'slipclose': S.slip = null; break;
-    case 'slipprint': if (S.slip && syncOn()){ sendPrint(S.slip); S.slip = null; break; } window.print(); return;
+    case 'slipprint': if (S.slip && syncOn()){ sendPrint(S.slip); S.slip = null; break; } window.print(); S.slip = null; render(); return;
     case 'setvat': ui.shop.vat = d.v === '1'; saveUi(); break;
     case 'setmanual': ui.manual = d.v === '1'; saveUi(); if (!ui.manual && S.tab === 'totals') S.tab = 'orders'; break;
     case 'setprinter': ui.printer = d.v === '1'; saveUi(); break;
