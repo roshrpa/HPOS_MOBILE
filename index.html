@@ -718,17 +718,25 @@ function oRange(){
   var r = S.orng || 'today';
   return '<div class="seg rseg" style="margin-bottom:10px">' + [['today', 'Today'], ['yesterday', 'Yesterday'], ['week', '7 days'], ['month', 'Month'], ['last', 'Last month']].map(function(x){ return '<button data-act="orng" data-v="' + x[0] + '" aria-pressed="' + (r === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
 }
+function oSalesOf(d){
+  var s = d.sales, yd = new Date(Date.now() - 864e5).toLocaleDateString('en-CA');
+  function zero(o){ if (typeof o === 'number') return 0; if (Array.isArray(o)) return o.every(function(x){ return typeof x === 'number'; }) ? o.map(zero) : []; if (o && typeof o === 'object'){ var r = {}; Object.keys(o).forEach(function(k){ r[k] = zero(o[k]); }); return r; } return o; }
+  /* the POS has sent nothing today (shop closed or no sales yet): its newest figures belong to yesterday, so "Today" must not show them */
+  if (d.day !== today() && d.day === yd) return Object.assign({}, s, {today:zero(s.today), yesterday:s.today});
+  return s;
+}
 function oHome(d){
-  var s = d.sales, t = s.today, y = s.yesterday, w = s.lastWd, C = d.control, fresh = d.day === today(), al = [];
+  var fresh = d.day === today(), yd0 = new Date(Date.now() - 864e5).toLocaleDateString('en-CA'), s = oSalesOf(d);
+  var t = s.today, y = s.yesterday, w = s.lastWd, C = d.control, al = [];
   var voidsT = C.voids.filter(function(v){ return v.d === d.day; }), discT = C.discs.filter(function(v){ return v.d === d.day; });
-  if (voidsT.length) al.push(['Cancelled bills today: ' + voidsT.length + ' (AED ' + fm(voidsT.reduce(function(a, v){ return a + v.tot; }, 0)) + ')', 'control']);
-  if (discT.length) al.push(['Discounts today: ' + discT.length + ' (AED ' + fm(discT.reduce(function(a, v){ return a + v.amt; }, 0)) + ')', 'control']);
+  if (voidsT.length) al.push(['Cancelled bills ' + (fresh ? 'today' : d.day) + ': ' + voidsT.length + ' (AED ' + fm(voidsT.reduce(function(a, v){ return a + v.tot; }, 0)) + ')', 'control']);
+  if (discT.length) al.push(['Discounts ' + (fresh ? 'today' : d.day) + ': ' + discT.length + ' (AED ' + fm(discT.reduce(function(a, v){ return a + v.amt; }, 0)) + ')', 'control']);
   var dr = C.drawer[0]; if (dr && ((dr.cash !== null && Math.abs(dr.cash) > 0.004) || (dr.card !== null && Math.abs(dr.card) > 0.004))) al.push(['Day close ' + dr.d + ': cash ' + (dr.cash === null ? '-' : (dr.cash > 0 ? '+' : '') + fm(dr.cash)) + ', card ' + (dr.card === null ? '-' : (dr.card > 0 ? '+' : '') + fm(dr.card)) + (dr.by ? ' (' + dr.by + ')' : ''), 'control']);
   var cs = C.cups.filter(function(c){ return c.short > 0 || c.edited; })[0]; if (cs) al.push([cs.kind + ' cup count ' + cs.d + ': ' + (cs.short ? cs.short + ' item(s) short' : 'edited') + (cs.by ? ' (' + cs.by + ')' : ''), 'control']);
   if (fresh && !C.morningDone && new Date().getHours() >= 11) al.push(['Morning cup count not done today', 'control']);
   if (d.stock.low) al.push([d.stock.low + ' raw material(s) below minimum', 'stock']);
   var secs = ownerSecs();
-  var k = S.orng || 'today', r = s[k], rl = {today:(fresh ? 'today' : d.day), yesterday:'yesterday', week:'last 7 days', month:'this month', last:'last month'}[k];
+  var k = S.orng || 'today', r = s[k], rl = {today:(fresh || d.day === yd0 ? 'today' : d.day), yesterday:'yesterday', week:'last 7 days', month:'this month', last:'last month'}[k];
   var cmp = k === 'today' ? '<div class="hsub" style="margin-top:6px">' + odelta(t.net, y.net, 'vs yesterday').replace(/class="od/, 'style="color:#fff" class="od') + odelta(t.net, w.net, 'vs last week').replace(/class="od/, 'style="color:#fff" class="od') + '</div>' : '';
   return oRange() + '<div class="hero"><small>Net sales ' + rl + '</small><b><i>AED</i> ' + fm(r.net) + '</b><div class="hsub"><span><b>' + r.bills + '</b> bills</span><span>avg <b>' + fm(r.bills ? r.net / r.bills : 0) + '</b></span></div>' + cmp + '</div>'
     + '<div class="pays"><div class="pay"><small>Cash</small><b>' + fm(r.pay.cash) + '</b></div><div class="pay"><small>Card</small><b>' + fm(r.pay.card) + '</b></div><div class="pay"><small>Online</small><b>' + fm(r.pay.agg) + '</b></div><div class="pay"><small>Credit</small><b>' + fm(r.pay.credit) + '</b></div><div class="pay"><small>Discounts</small><b>' + fm(r.disc) + '</b></div><div class="pay"><small>VAT</small><b>' + fm(r.vat) + '</b></div></div>'
@@ -738,7 +746,7 @@ function oHome(d){
     + (true ? ocard('Last 30 days', obars(d.daily.map(function(x){ return x[1]; }), d.daily.map(function(x, i){ return i % 5 === 0 ? x[0].slice(3) : ''; }), 80)) : '');
 }
 function oSales(d){
-  var k = S.orng || 'today', r = d.sales[k];
+  var k = S.orng || 'today', r = oSalesOf(d)[k];
   var hrs = r.hours, f = 24, l = -1; hrs.forEach(function(v, i){ if (v){ if (i < f) f = i; if (i > l) l = i; } });
   var hl = []; for (var h = f; h <= l; h++) hl.push(h);
   return ''
@@ -781,7 +789,7 @@ function oMoney(d){
     + '<div class="btns" style="justify-content:center;margin:6px 0 14px"><button class="btn" data-act="oshare">Share summary</button></div>';
 }
 function ownerText(d){
-  var s = d.sales, M = d.money, L = ['*' + (d.shop || 'Hollywood Ice Creams') + '* - summary ' + d.day, '', 'Today: AED ' + fm(s.today.net) + ' (' + s.today.bills + ' bills)', 'Yesterday: AED ' + fm(s.yesterday.net), 'Last 7 days: AED ' + fm(s.week.net), 'This month: AED ' + fm(s.month.net),
+  var s = oSalesOf(d), M = d.money, L = ['*' + (d.shop || 'Hollywood Ice Creams') + '* - summary ' + d.day, '', 'Today: AED ' + fm(s.today.net) + ' (' + s.today.bills + ' bills)', 'Yesterday: AED ' + fm(s.yesterday.net), 'Last 7 days: AED ' + fm(s.week.net), 'This month: AED ' + fm(s.month.net),
     'Cash AED ' + fm(s.today.pay.cash) + ' / Card ' + fm(s.today.pay.card) + ' / Online ' + fm(s.today.pay.agg) + ' / Credit ' + fm(s.today.pay.credit), ''];
   if (ownerSecs().indexOf('money') >= 0) L.push('Net profit this month: AED ' + fm(M.pnl.np), 'To pay suppliers: AED ' + fm(M.payables), 'Credit to receive: AED ' + fm(M.credit.out), 'Cash drawer: AED ' + fm(M.drawer) + '   Bank: AED ' + fm(M.bank));
   return L.join('\n');
